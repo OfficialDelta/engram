@@ -122,7 +122,7 @@ Indexes: edges(from_node), edges(to_node), nodes(type), nodes(strength), nodes(a
 **Embedding Database (SQLite with sqlite-vec):**
 
 Virtual table: node_embeddings(node_id TEXT, embedding FLOAT[dimensions])
-- dimensions depends on embedding model (1536 for OpenAI, 1024 for voyage-3-lite)
+- dimensions depends on embedding model (1536 for OpenAI, 512 for voyage-3-lite)
 - Used for entity resolution (deduplication) and fuzzy node lookup
 - Updated whenever a node is created or its name/description changes
 
@@ -360,5 +360,4 @@ All values are configurable. The defaults are initial values to be calibrated em
 - Multi-user shared memory (each user has their own ~/.engram)
 - Real-time collaboration between multiple agents
 - Training/fine-tuning models on the graph data
-- Daily paper review agent (future feature using the same graph)
 - GSD-specific features beyond basic context tagging
