@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { StructuredEpisode, GraphChangeRequest, ContradictionResult } from '../types.js';
+import type { StructuredEpisode, GraphChangeRequest, ContradictionResult, RawToolCall } from '../types.js';
 
 vi.mock('../core/embed.js', () => ({
   getEmbedding: vi.fn(async (texts: string[]) => {
@@ -303,5 +303,100 @@ describe('Contradiction Detection Path', () => {
     expect(result!.verdict).toBe('DIRECT_CONTRADICTION');
 
     db.close();
+  });
+});
+
+describe('Crash Recovery', () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    tmpDir = createTmpDataDir();
+    dbPath = path.join(tmpDir, 'engram.db');
+    const { initializeSchema } = await import('../db/migrations.js');
+    const db = initializeSchema(dbPath);
+    db.close();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('findUnconsolidatedSessions detects session without episode marker', async () => {
+    const { appendEvent } = await import('../core/event-stream.js');
+    const { findUnconsolidatedSessions } = await import('../core/consolidation.js');
+
+    appendEvent('sess-a', { type: 'file_read', sessionId: 'sess-a', timestamp: new Date().toISOString(), filePath: 'src/foo.ts' }, tmpDir);
+    appendEvent('sess-b', { type: 'file_read', sessionId: 'sess-b', timestamp: new Date().toISOString(), filePath: 'src/bar.ts' }, tmpDir);
+    appendEvent('sess-b', { type: 'file_write', sessionId: 'sess-b', timestamp: new Date().toISOString(), filePath: 'src/bar.ts', linesChanged: 3, evidenceSnippet: 'updated bar' }, tmpDir);
+
+    fs.writeFileSync(
+      path.join(tmpDir, 'episodes', 'sess-a.episode.json'),
+      JSON.stringify({ episodeId: 'ep-1', completedAt: new Date().toISOString() }),
+    );
+
+    const unconsolidated = findUnconsolidatedSessions(tmpDir);
+    expect(unconsolidated).toEqual(['sess-b']);
+  });
+
+  it('consolidateSession creates episode marker and recovery completes', async () => {
+    const { appendEvent } = await import('../core/event-stream.js');
+    const { consolidateSession, findUnconsolidatedSessions } = await import('../core/consolidation.js');
+
+    appendEvent('sess-recover', { type: 'file_read', sessionId: 'sess-recover', timestamp: new Date().toISOString(), filePath: 'src/a.ts' }, tmpDir);
+    appendEvent('sess-recover', { type: 'file_write', sessionId: 'sess-recover', timestamp: new Date().toISOString(), filePath: 'src/a.ts', linesChanged: 5, evidenceSnippet: 'new code' }, tmpDir);
+    appendEvent('sess-recover', { type: 'test_run', sessionId: 'sess-recover', timestamp: new Date().toISOString(), command: 'npm test', exitCode: 0, passed: true }, tmpDir);
+
+    expect(findUnconsolidatedSessions(tmpDir)).toContain('sess-recover');
+
+    const mockClient = createMockClient(pass1JSON, pass2Input);
+    await consolidateSession('sess-recover', dbPath, tmpDir, { client: mockClient });
+
+    expect(fs.existsSync(path.join(tmpDir, 'episodes', 'sess-recover.episode.json'))).toBe(true);
+    expect(findUnconsolidatedSessions(tmpDir)).toEqual([]);
+  });
+});
+
+describe('Hook Fast Path Latency (R009)', () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    tmpDir = createTmpDataDir();
+    dbPath = path.join(tmpDir, 'engram.db');
+    const { initializeSchema } = await import('../db/migrations.js');
+    const db = initializeSchema(dbPath);
+    db.close();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('processPostToolUse fast path completes under 50ms for file_read', async () => {
+    const { processPostToolUse } = await import('../adapters/claude-code/post-tool-use.js');
+
+    processPostToolUse(
+      { tool_name: 'Read', tool_input: { file_path: 'src/warmup.ts' }, session_id: 'sess-perf' },
+      tmpDir,
+      dbPath,
+      { spawnCheck: vi.fn() },
+    );
+
+    const times: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const toolCall: RawToolCall = {
+        tool_name: 'Read',
+        tool_input: { file_path: `src/file-${i}.ts` },
+        session_id: 'sess-perf',
+      };
+      const start = performance.now();
+      processPostToolUse(toolCall, tmpDir, dbPath, { spawnCheck: vi.fn() });
+      times.push(performance.now() - start);
+    }
+
+    for (const t of times) {
+      expect(t).toBeLessThan(50);
+    }
   });
 });
