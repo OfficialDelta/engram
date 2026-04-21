@@ -6,9 +6,7 @@ import { buildTurnCompleteEvent, appendEvent, getSessionEvents } from '../../cor
 import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identity.js';
 import { loadSessionState, saveSessionState } from '../../core/session-state.js';
 import { spawnConsolidation } from '../../core/consolidation.js';
-
-const CONSOLIDATION_TURN_THRESHOLD = 5;
-const CONSOLIDATION_EVENT_THRESHOLD = 50;
+import { loadConfig } from '../../core/config.js';
 
 function logError(dataDir: string, message: string): void {
   try {
@@ -25,6 +23,10 @@ export function processStop(
   dataDir: string,
   dbPath: string,
 ): Record<string, unknown> {
+  const cfg = loadConfig();
+  const turnThreshold = cfg.consolidation.turnThreshold ?? 5;
+  const eventThreshold = cfg.consolidation.eventThreshold ?? 50;
+
   const state = loadSessionState(dataDir, sessionId);
   state.turnCount++;
 
@@ -35,8 +37,8 @@ export function processStop(
   saveSessionState(dataDir, sessionId, state);
 
   const shouldConsolidate =
-    state.turnCount >= CONSOLIDATION_TURN_THRESHOLD ||
-    getSessionEvents(sessionId, dataDir).length >= CONSOLIDATION_EVENT_THRESHOLD;
+    state.turnCount >= turnThreshold ||
+    getSessionEvents(sessionId, dataDir).length >= eventThreshold;
 
   if (shouldConsolidate) {
     spawnConsolidation(sessionId, dbPath, dataDir);

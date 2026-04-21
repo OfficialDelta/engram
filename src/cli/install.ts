@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { ensureDataDirs, getDbPath } from '../core/project-identity.js';
 import { initializeSchema } from '../db/migrations.js';
+import { getConfigPath } from '../core/config.js';
 
 const HOOK_EVENTS = {
   PostToolUse: { handler: 'post-tool-use', timeout: 10 },
@@ -198,6 +199,10 @@ function main(): void {
       for (const w of result.warnings) {
         console.log(`  ⚠ ${w}`);
       }
+    }
+
+    if (!existsSync(getConfigPath()) && !args.includes('--skip-config')) {
+      console.log('\n  Run `engram config` to set up API keys and preferences.');
     }
   } catch (err) {
     console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);

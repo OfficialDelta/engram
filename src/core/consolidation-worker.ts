@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { consolidateSession } from './consolidation.js';
+import { loadConfig } from './config.js';
 
 const sessionId = process.argv[2];
 const dbPath = process.argv[3];
@@ -15,8 +16,28 @@ const logDir = path.join(dataDir, 'logs');
 fs.mkdirSync(logDir, { recursive: true });
 const logPath = path.join(logDir, `consolidation-${sessionId}.log`);
 
+const cfg = loadConfig();
+
+if (cfg.llm.apiKey && !process.env.ANTHROPIC_API_KEY) {
+  process.env.ANTHROPIC_API_KEY = cfg.llm.apiKey;
+}
+
 try {
-  await consolidateSession(sessionId, dbPath, dataDir);
+  const consolidationConfig = {
+    ...(cfg.llm.pass1Model ? { pass1Model: cfg.llm.pass1Model } : {}),
+    ...(cfg.llm.pass2Model ? { pass2Model: cfg.llm.pass2Model } : {}),
+    ...(cfg.consolidation.windowSize ? { windowSize: cfg.consolidation.windowSize } : {}),
+    ...(cfg.consolidation.windowOverlap ? { windowOverlap: cfg.consolidation.windowOverlap } : {}),
+    ...(cfg.embedding.provider || cfg.embedding.apiKey
+      ? {
+          embeddingConfig: {
+            ...(cfg.embedding.provider ? { provider: cfg.embedding.provider } : {}),
+            ...(cfg.embedding.apiKey ? { apiKey: cfg.embedding.apiKey } : {}),
+          },
+        }
+      : {}),
+  };
+  await consolidateSession(sessionId, dbPath, dataDir, consolidationConfig);
   fs.writeFileSync(logPath, `[${new Date().toISOString()}] Consolidation completed for session ${sessionId}\n`);
   process.exit(0);
 } catch (err) {

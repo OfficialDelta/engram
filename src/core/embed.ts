@@ -1,8 +1,11 @@
+import { loadConfig } from './config.js';
+
 export async function getEmbedding(
   texts: string[],
   config?: { provider?: string; apiKey?: string },
 ): Promise<number[][]> {
-  const provider = config?.provider ?? 'voyage-3-lite';
+  const fileConfig = loadConfig();
+  const provider = config?.provider ?? fileConfig.embedding.provider ?? 'voyage-3-lite';
   let url: string;
   let model: string;
   let apiKey: string | undefined;
@@ -10,11 +13,11 @@ export async function getEmbedding(
   if (provider.startsWith('voyage')) {
     url = 'https://api.voyageai.com/v1/embeddings';
     model = provider;
-    apiKey = config?.apiKey ?? process.env.VOYAGE_API_KEY;
+    apiKey = config?.apiKey ?? fileConfig.embedding.apiKey ?? process.env.VOYAGE_API_KEY;
   } else {
     url = 'https://api.openai.com/v1/embeddings';
     model = provider === 'openai' ? 'text-embedding-3-small' : provider;
-    apiKey = config?.apiKey ?? process.env.OPENAI_API_KEY;
+    apiKey = config?.apiKey ?? fileConfig.embedding.apiKey ?? process.env.OPENAI_API_KEY;
   }
 
   if (!apiKey) {

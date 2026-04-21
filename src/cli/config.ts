@@ -48,13 +48,13 @@ function setNestedValue(obj: Record<string, unknown>, dotPath: string, value: un
   const parts = dotPath.split('.');
   let current = obj;
   for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i];
+    const part = parts[i]!;
     if (!(part in current) || typeof current[part] !== 'object' || current[part] === null) {
       current[part] = {};
     }
     current = current[part] as Record<string, unknown>;
   }
-  current[parts[parts.length - 1]] = value;
+  current[parts[parts.length - 1]!] = value;
 }
 
 function printConfigUsage(): void {
@@ -167,8 +167,9 @@ async function configWizard(overridePath?: string): Promise<void> {
     EMBEDDING_PROVIDERS.forEach((p, i) => console.log(`  ${i + 1}. ${p}`));
     const providerChoice = await rl.question(`Choose embedding provider [1-${EMBEDDING_PROVIDERS.length}]: `);
     const providerIndex = parseInt(providerChoice, 10) - 1;
-    if (providerIndex >= 0 && providerIndex < EMBEDDING_PROVIDERS.length) {
-      config.embedding.provider = EMBEDDING_PROVIDERS[providerIndex];
+    const selectedProvider = EMBEDDING_PROVIDERS[providerIndex];
+    if (providerIndex >= 0 && selectedProvider) {
+      config.embedding.provider = selectedProvider;
     }
 
     const provider = config.embedding.provider ?? '';
