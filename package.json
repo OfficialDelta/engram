@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "bin": {
+    "engram": "./dist/cli/install.js"
+  },
   "scripts": {
     "test": "vitest run"
   },
