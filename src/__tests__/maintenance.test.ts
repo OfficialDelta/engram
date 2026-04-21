@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import { initializeSchema } from '../db/migrations.js';
 import { createNode, getNode, createEdge, getEdge } from '../db/graph.js';
-import { decaySweep, runMaintenance } from '../core/maintenance.js';
+import { decaySweep, patternScan, runMaintenance } from '../core/maintenance.js';
 import type { CreateNodeInput, CreateEdgeInput } from '../types.js';
 
 function freshDb() {
@@ -197,5 +197,89 @@ describe('runMaintenance', () => {
     } finally {
       cleanTmpDir(dataDir);
     }
+  });
+});
+
+describe('patternScan', () => {
+  function makeEdgeInput(sourceId: string, targetId: string, relType: string): CreateEdgeInput {
+    return {
+      sourceNodeId: sourceId,
+      targetNodeId: targetId,
+      relationshipType: relType,
+      weight: 1.0,
+      metadata: {},
+    };
+  }
+
+  it('creates a pattern node when 3+ same-type edges share a relationship type', () => {
+    const db = freshDb();
+    const nodes = Array.from({ length: 6 }, (_, i) =>
+      createNode(db, makeNodeInput({ name: `concept-${i}`, nodeType: 'concept', strength: 1.0 })),
+    );
+    // 3 edges: concept→concept with relationship_type 'related'
+    createEdge(db, makeEdgeInput(nodes[0].id, nodes[1].id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[2].id, nodes[3].id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[4].id, nodes[5].id, 'related'));
+
+    const result = patternScan(db);
+
+    expect(result.patternsCreated).toBe(1);
+    const patternRow = db.prepare("SELECT * FROM nodes WHERE node_type = 'pattern'").get() as { name: string; description: string } | undefined;
+    expect(patternRow).toBeDefined();
+    expect(patternRow!.name).toBe('pattern:related:concept');
+    expect(patternRow!.description).toContain('related');
+    expect(patternRow!.description).toContain('concept');
+  });
+
+  it('does not create a pattern when fewer than 3 edges exist', () => {
+    const db = freshDb();
+    const nodes = Array.from({ length: 4 }, (_, i) =>
+      createNode(db, makeNodeInput({ name: `concept-${i}`, nodeType: 'concept', strength: 1.0 })),
+    );
+    createEdge(db, makeEdgeInput(nodes[0].id, nodes[1].id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[2].id, nodes[3].id, 'related'));
+
+    const result = patternScan(db);
+
+    expect(result.patternsCreated).toBe(0);
+    const patternRow = db.prepare("SELECT * FROM nodes WHERE node_type = 'pattern'").get();
+    expect(patternRow).toBeUndefined();
+  });
+
+  it('does not duplicate an existing pattern node', () => {
+    const db = freshDb();
+    const nodes = Array.from({ length: 6 }, (_, i) =>
+      createNode(db, makeNodeInput({ name: `concept-${i}`, nodeType: 'concept', strength: 1.0 })),
+    );
+    createEdge(db, makeEdgeInput(nodes[0].id, nodes[1].id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[2].id, nodes[3].id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[4].id, nodes[5].id, 'related'));
+
+    const first = patternScan(db);
+    expect(first.patternsCreated).toBe(1);
+
+    const second = patternScan(db);
+    expect(second.patternsCreated).toBe(0);
+
+    const patternRows = db.prepare("SELECT * FROM nodes WHERE node_type = 'pattern'").all();
+    expect(patternRows).toHaveLength(1);
+  });
+
+  it('only matches edges where source and target have the same node_type', () => {
+    const db = freshDb();
+    const concepts = Array.from({ length: 3 }, (_, i) =>
+      createNode(db, makeNodeInput({ name: `concept-${i}`, nodeType: 'concept', strength: 1.0 })),
+    );
+    const entities = Array.from({ length: 3 }, (_, i) =>
+      createNode(db, makeNodeInput({ name: `entity-${i}`, nodeType: 'entity', strength: 1.0 })),
+    );
+    // 3 edges but each crosses concept→entity — not same-type
+    createEdge(db, makeEdgeInput(concepts[0].id, entities[0].id, 'related'));
+    createEdge(db, makeEdgeInput(concepts[1].id, entities[1].id, 'related'));
+    createEdge(db, makeEdgeInput(concepts[2].id, entities[2].id, 'related'));
+
+    const result = patternScan(db);
+
+    expect(result.patternsCreated).toBe(0);
   });
 });

@@ -1,7 +1,7 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { deleteNode, updateNode } from '../db/graph.js';
+import { createNode, deleteNode, updateNode } from '../db/graph.js';
 
 type Database = BetterSqlite3.Database;
 
@@ -45,12 +45,13 @@ export function runMaintenance(
 
     const result = db.transaction(() => {
       const sweep = decaySweep(db, config);
+      const patterns = patternScan(db);
 
       const maintenanceRecord = {
         timestamp: new Date().toISOString(),
         nodesPruned: sweep.nodesPruned,
         nodesDecayed: sweep.nodesDecayed,
-        patternsCreated: 0,
+        patternsCreated: patterns.patternsCreated,
         filesSuperseded: 0,
       };
 
@@ -58,12 +59,12 @@ export function runMaintenance(
         "INSERT OR REPLACE INTO metadata (key, value) VALUES ('last_maintenance_run', ?)",
       ).run(JSON.stringify(maintenanceRecord));
 
-      return sweep;
+      return { ...sweep, patternsCreated: patterns.patternsCreated };
     })();
 
     return {
       nodesPruned: result.nodesPruned,
-      patternsCreated: 0,
+      patternsCreated: result.patternsCreated,
       filesSuperseded: 0,
       durationMs: Date.now() - start,
       skipped: false,
@@ -103,4 +104,43 @@ export function decaySweep(
   }
 
   return { nodesPruned, nodesDecayed };
+}
+
+export interface PatternScanResult {
+  patternsCreated: number;
+}
+
+export function patternScan(db: Database): PatternScanResult {
+  const groups = db.prepare(`
+    SELECT e.relationship_type, n.node_type, COUNT(*) AS cnt
+    FROM edges e
+    JOIN nodes n ON n.id = e.source_node_id
+    JOIN nodes n2 ON n2.id = e.target_node_id
+    WHERE n.node_type = n2.node_type
+    GROUP BY e.relationship_type, n.node_type
+    HAVING cnt >= 3
+  `).all() as Array<{ relationship_type: string; node_type: string; cnt: number }>;
+
+  let patternsCreated = 0;
+
+  for (const group of groups) {
+    const patternName = `pattern:${group.relationship_type}:${group.node_type}`;
+    const existing = db.prepare(
+      "SELECT id FROM nodes WHERE name = ? AND node_type = 'pattern'",
+    ).get(patternName) as { id: string } | undefined;
+
+    if (existing) continue;
+
+    createNode(db, {
+      name: patternName,
+      nodeType: 'pattern',
+      description: `Recurring ${group.relationship_type} relationship among ${group.node_type} nodes (${group.cnt} edges)`,
+      affectedFiles: [],
+      strength: 1.0,
+      metadata: { relationshipType: group.relationship_type, nodeType: group.node_type, edgeCount: group.cnt },
+    });
+    patternsCreated++;
+  }
+
+  return { patternsCreated };
 }
