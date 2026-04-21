@@ -74,7 +74,7 @@ export function saveConfig(config: EngramConfig, overridePath?: string): void {
   writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
 }
 
-const KNOWN_PROVIDERS = ['voyage-3-lite', 'voyage-3', 'openai', 'text-embedding-3-small', 'text-embedding-3-large', 'ollama'];
+const KNOWN_PROVIDERS = ['voyage-3-lite', 'voyage-3', 'openai', 'text-embedding-3-small', 'text-embedding-3-large', 'local', 'ollama'];
 
 export function validateConfig(config: unknown): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
