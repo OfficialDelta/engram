@@ -18,6 +18,7 @@ vi.mock('../db/migrations.js', () => ({
 
 import { runInstall } from '../cli/install.js';
 import { ensureDataDirs } from '../core/project-identity.js';
+import { getConfigPath } from '../core/config.js';
 
 let tmpDir: string;
 
@@ -122,5 +123,17 @@ describe('install CLI', () => {
       );
       expect(engramHooks).toHaveLength(1);
     }
+  });
+
+  it('install succeeds and config module is wired (getConfigPath accessible from install context)', () => {
+    const claudeDir = path.join(tmpDir, '.claude');
+    const hd = hookDir();
+
+    const result = runInstall({ claudeConfigDir: claudeDir, cwd: tmpDir, hookDir: hd });
+    expect(result.settingsPath).toBeTruthy();
+    expect(result.dataDir).toBeTruthy();
+    expect(result.dbPath).toBeTruthy();
+
+    expect(getConfigPath()).toBe(path.join(os.homedir(), '.engram', 'config.json'));
   });
 });

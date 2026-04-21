@@ -220,3 +220,32 @@ describe('maskApiKey', () => {
     expect(maskApiKey('12345')).toBe('****2345');
   });
 });
+
+describe('integration: full config round-trip', () => {
+  it('saveConfig then loadConfig preserves all fields across all sections', () => {
+    const full: EngramConfig = {
+      llm: { apiKey: 'sk-roundtrip', pass1Model: 'claude-sonnet-4-20250514', pass2Model: 'claude-opus-4-20250514' },
+      embedding: { provider: 'voyage-3-lite', apiKey: 'va-roundtrip', ollamaUrl: 'http://localhost:11434' },
+      consolidation: { turnThreshold: 8, eventThreshold: 80, windowSize: 20, windowOverlap: 5 },
+    };
+    saveConfig(full, configPath);
+    const loaded = loadConfig(configPath);
+    expect(loaded.llm).toEqual(full.llm);
+    expect(loaded.embedding).toEqual(full.embedding);
+    expect(loaded.consolidation).toEqual(full.consolidation);
+  });
+});
+
+describe('integration: env var precedence over config file', () => {
+  it('ANTHROPIC_API_KEY env var wins over config file llm.apiKey', () => {
+    const fileConfig: EngramConfig = {
+      llm: { apiKey: 'file-key-should-lose' },
+      embedding: {},
+      consolidation: {},
+    };
+    saveConfig(fileConfig, configPath);
+    process.env.ANTHROPIC_API_KEY = 'env-key-should-win';
+    const loaded = loadConfig(configPath);
+    expect(loaded.llm.apiKey).toBe('env-key-should-win');
+  });
+});
