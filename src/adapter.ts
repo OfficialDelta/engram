@@ -7,8 +7,7 @@ import { getFileAnnotations } from './core/involuntary.js';
 import { buildContext } from './core/context-builder.js';
 import { spreadingActivation } from './core/retrieval.js';
 import { findUnconsolidatedSessions, spawnConsolidation } from './core/consolidation.js';
-import { getRecentFileEntryPoints } from './adapters/claude-code/session-start.js';
-import { extractEntryPoints } from './core/entry-points.js';
+import { extractEntryPoints, getRecentFileEntryPoints } from './core/entry-points.js';
 import type { AdapterConfig, AdapterSession, ToolCallResult, RawToolCall, Annotation, FileReadEvent, FileWriteEvent } from './types.js';
 
 const CONSOLIDATION_TURN_THRESHOLD = 5;
