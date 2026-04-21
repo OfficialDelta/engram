@@ -95,6 +95,33 @@ describe('dynamic embedding dimensions', () => {
     db2.close();
   });
 
+  it('stores and retrieves embeddings at provider-specific dimensions (384 local, 768 ollama)', () => {
+    const dbPath = makeTmpDb();
+
+    const db384 = initializeSchema(dbPath, 384, 'local');
+    const emb384 = new Float32Array(384);
+    for (let i = 0; i < 384; i++) emb384[i] = Math.sin(i * 0.01);
+    db384.prepare('INSERT INTO node_embeddings (node_id, embedding) VALUES (?, ?)').run('local-node', Buffer.from(emb384.buffer));
+    const row384 = db384.prepare('SELECT node_id FROM node_embeddings WHERE node_id = ?').get('local-node') as { node_id: string };
+    expect(row384.node_id).toBe('local-node');
+    db384.close();
+
+    const db768 = initializeSchema(dbPath, 768, 'ollama');
+    const dim = db768.prepare("SELECT value FROM metadata WHERE key = 'embedding_dimension'").get() as { value: string };
+    expect(dim.value).toBe('768');
+
+    const oldRow = db768.prepare('SELECT node_id FROM node_embeddings WHERE node_id = ?').get('local-node');
+    expect(oldRow).toBeUndefined();
+
+    const emb768 = new Float32Array(768);
+    for (let i = 0; i < 768; i++) emb768[i] = Math.cos(i * 0.01);
+    db768.prepare('INSERT INTO node_embeddings (node_id, embedding) VALUES (?, ?)').run('ollama-node', Buffer.from(emb768.buffer));
+    const row768 = db768.prepare('SELECT node_id FROM node_embeddings WHERE node_id = ?').get('ollama-node') as { node_id: string };
+    expect(row768.node_id).toBe('ollama-node');
+
+    db768.close();
+  });
+
   it('preserves non-embedding tables during rebuild', () => {
     const dbPath = makeTmpDb();
 

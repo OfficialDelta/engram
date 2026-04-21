@@ -179,3 +179,53 @@ describe('getEmbedding - Ollama provider', () => {
       .rejects.toThrow(/malformed response/);
   });
 });
+
+describe('getEmbedding - zero-config smoke tests', () => {
+  afterEach(() => {
+    delete process.env.VOYAGE_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  });
+
+  it('local provider works without any API key env vars', async () => {
+    delete process.env.VOYAGE_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+
+    _resetLocalPipeline();
+
+    const mockOutput = { tolist: () => [[0.1, 0.2, 0.3]] };
+    const mockPipeline = vi.fn().mockResolvedValue(mockOutput);
+    const mockPipelineFactory = vi.fn().mockResolvedValue(mockPipeline);
+
+    vi.doMock('@huggingface/transformers', () => ({
+      pipeline: mockPipelineFactory,
+    }));
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { getEmbedding: getEmb, _resetLocalPipeline: reset } = await import('../core/embed.js');
+    reset();
+
+    const result = await getEmb(['zero config test'], { provider: 'local' });
+    expect(result).toEqual([[0.1, 0.2, 0.3]]);
+
+    consoleSpy.mockRestore();
+    reset();
+    vi.doUnmock('@huggingface/transformers');
+  });
+});
+
+describe('provider dimension consistency', () => {
+  it('getDimensions matches expected values for all multi-provider types', () => {
+    expect(getDimensions('local')).toBe(384);
+    expect(getDimensions('ollama')).toBe(768);
+    expect(getDimensions('voyage-3-lite')).toBe(512);
+    expect(getDimensions('voyage-3')).toBe(1024);
+    expect(getDimensions('text-embedding-3-small')).toBe(1536);
+    expect(getDimensions('text-embedding-3-large')).toBe(3072);
+  });
+
+  it('unknown provider falls back to 512 (backward-compatible default)', () => {
+    expect(getDimensions('some-future-provider')).toBe(512);
+    expect(getDimensions('')).toBe(512);
+  });
+});
