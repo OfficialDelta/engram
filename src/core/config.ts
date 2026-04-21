@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 
@@ -72,6 +72,9 @@ export function saveConfig(config: EngramConfig, overridePath?: string): void {
   const filePath = overridePath ?? getConfigPath();
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  if (process.platform !== 'win32') {
+    chmodSync(filePath, 0o600);
+  }
 }
 
 const KNOWN_PROVIDERS = ['voyage-3-lite', 'voyage-3', 'openai', 'text-embedding-3-small', 'text-embedding-3-large', 'local', 'ollama'];
