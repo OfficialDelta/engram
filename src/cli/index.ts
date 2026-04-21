@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { runInstall } from './install.js';
 import { runUninstall } from './uninstall.js';
 import { runStatus, formatStatus } from './status.js';
+import { runConfig } from './config.js';
 
 function printUsage(): void {
   console.log(`Usage: engram <command>
@@ -13,6 +14,7 @@ Commands:
   install     Register engram hooks and initialize project data
   uninstall   Remove engram hooks from Claude Code settings
   status      Show engram graph stats, hook registration, and data info
+  config      Show, set, or interactively configure engram settings
   mcp         Start MCP server exposing engram tools
 
 Run 'engram <command> --help' for more information on a command.`);
@@ -51,6 +53,10 @@ async function main(): Promise<void> {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
+      break;
+    }
+    case 'config': {
+      await runConfig(process.argv.slice(3));
       break;
     }
     case 'mcp': {
