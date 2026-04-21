@@ -22,7 +22,7 @@ function logError(dataDir: string, message: string): void {
 
 function main(): void {
   try {
-    const stdin = readFileSync('/dev/stdin', 'utf-8');
+    const stdin = readFileSync(0, 'utf-8');
     const input = JSON.parse(stdin) as Record<string, unknown>;
 
     const cwd = (input.cwd as string) ?? process.cwd();

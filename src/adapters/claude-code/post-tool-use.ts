@@ -122,7 +122,7 @@ function main(): void {
     const dataDir = ensureDataDirs(cwd);
     const dbPath = getDbPath(cwd);
 
-    const stdin = readFileSync('/dev/stdin', 'utf-8');
+    const stdin = readFileSync(0, 'utf-8');
     const input = JSON.parse(stdin) as Record<string, unknown>;
 
     const rawToolCall: RawToolCall = {
