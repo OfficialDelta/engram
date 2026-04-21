@@ -414,12 +414,36 @@ export function findUnconsolidatedSessions(dataDir: string): string[] {
   for (const file of files) {
     const sessionId = file.replace(/\.jsonl$/, '');
     const episodePath = path.join(dataDir, 'episodes', sessionId + '.episode.json');
-    if (!fs.existsSync(episodePath)) {
+    const failedPath = path.join(dataDir, 'episodes', sessionId + '.failed.json');
+    if (!fs.existsSync(episodePath) && !fs.existsSync(failedPath)) {
       sessionIds.push(sessionId);
     }
   }
 
   return sessionIds;
+}
+
+export function findFailedConsolidations(dataDir: string): Array<{ sessionId: string; error: string; timestamp: string }> {
+  const episodesDir = path.join(dataDir, 'episodes');
+  if (!fs.existsSync(episodesDir)) return [];
+
+  const results: Array<{ sessionId: string; error: string; timestamp: string }> = [];
+
+  for (const file of fs.readdirSync(episodesDir).filter((f) => f.endsWith('.failed.json'))) {
+    try {
+      const raw = fs.readFileSync(path.join(episodesDir, file), 'utf-8');
+      const parsed = JSON.parse(raw) as { sessionId?: string; error?: string; timestamp?: string };
+      results.push({
+        sessionId: parsed.sessionId ?? file.replace(/\.failed\.json$/, ''),
+        error: parsed.error ?? 'unknown',
+        timestamp: parsed.timestamp ?? '',
+      });
+    } catch {
+      // malformed .failed.json — skip
+    }
+  }
+
+  return results;
 }
 
 export function spawnConsolidation(

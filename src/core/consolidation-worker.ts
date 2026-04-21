@@ -43,5 +43,15 @@ try {
 } catch (err) {
   const message = err instanceof Error ? err.stack ?? err.message : String(err);
   fs.writeFileSync(logPath, `[${new Date().toISOString()}] Consolidation failed for session ${sessionId}:\n${message}\n`);
+  try {
+    const episodesDir = path.join(dataDir, 'episodes');
+    fs.mkdirSync(episodesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(episodesDir, sessionId + '.failed.json'),
+      JSON.stringify({ sessionId, error: message, timestamp: new Date().toISOString() }),
+    );
+  } catch {
+    // marker write failure must not mask the original error
+  }
   process.exit(1);
 }

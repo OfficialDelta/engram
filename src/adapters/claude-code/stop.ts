@@ -41,7 +41,11 @@ export function processStop(
     getSessionEvents(sessionId, dataDir).length >= eventThreshold;
 
   if (shouldConsolidate) {
-    spawnConsolidation(sessionId, dbPath, dataDir);
+    if (!cfg.llm.apiKey && !process.env.ANTHROPIC_API_KEY) {
+      console.error('[engram] Consolidation skipped: no API key configured. Run "engram config" to set up.');
+    } else {
+      spawnConsolidation(sessionId, dbPath, dataDir);
+    }
   }
 
   return {};
