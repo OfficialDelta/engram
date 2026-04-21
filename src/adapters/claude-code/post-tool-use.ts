@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { classifyToolCall, appendEvent, detectDerivedEvents, getSessionEvents } from '../../core/event-stream.js';
 import { getFileAnnotations } from '../../core/involuntary.js';
 import { initializeSchema } from '../../db/migrations.js';
-import { getDataDir, getDbPath, ensureDataDirs } from './project-identity.js';
-import { loadSessionState, saveSessionState } from './session-state.js';
-import { buildContext } from './context-builder.js';
+import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identity.js';
+import { loadSessionState, saveSessionState } from '../../core/session-state.js';
+import { buildContext } from '../../core/context-builder.js';
 import type { RawToolCall, Annotation, FileReadEvent, FileWriteEvent } from '../../types.js';
 
 function logError(dataDir: string, message: string): void {

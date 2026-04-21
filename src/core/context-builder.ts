@@ -1,4 +1,4 @@
-import type { ContradictionResult, Annotation, TieredResults, NodeResult } from '../../types.js';
+import type { ContradictionResult, Annotation, TieredResults, NodeResult } from '../types.js';
 
 const DEFAULT_BUDGET = 10_000;
 

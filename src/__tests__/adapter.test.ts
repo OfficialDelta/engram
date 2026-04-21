@@ -34,9 +34,9 @@ vi.mock('../db/migrations.js', () => ({
   initializeSchema: vi.fn(() => ({ close: vi.fn() })),
 }));
 
-import { getProjectHash, getDataDir, ensureDataDirs } from '../adapters/claude-code/project-identity.js';
-import { loadSessionState, saveSessionState, type SessionState } from '../adapters/claude-code/session-state.js';
-import { buildContext } from '../adapters/claude-code/context-builder.js';
+import { getProjectHash, getDataDir, ensureDataDirs } from '../core/project-identity.js';
+import { loadSessionState, saveSessionState, type SessionState } from '../core/session-state.js';
+import { buildContext } from '../core/context-builder.js';
 import { processPostToolUse } from '../adapters/claude-code/post-tool-use.js';
 import { processSessionStart } from '../adapters/claude-code/session-start.js';
 import { extractEntryPoints } from '../adapters/claude-code/user-prompt-submit.js';

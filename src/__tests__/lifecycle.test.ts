@@ -224,7 +224,7 @@ describe('Contradiction Detection Path', () => {
   });
 
   it('pending contradiction in session state appears in additionalContext', async () => {
-    const { saveSessionState, loadSessionState } = await import('../adapters/claude-code/session-state.js');
+    const { saveSessionState, loadSessionState } = await import('../core/session-state.js');
     const { processPostToolUse } = await import('../adapters/claude-code/post-tool-use.js');
 
     const contradictionResult: ContradictionResult = {

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { initializeSchema } from '../../db/migrations.js';
 import { ContradictionChecker } from '../../core/contradiction.js';
-import { loadSessionState, saveSessionState } from './session-state.js';
+import { loadSessionState, saveSessionState } from '../../core/session-state.js';
 
 const sessionId = process.argv[2];
 const dbPath = process.argv[3];

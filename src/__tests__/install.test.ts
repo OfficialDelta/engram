@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../adapters/claude-code/project-identity.js', () => ({
+vi.mock('../core/project-identity.js', () => ({
   ensureDataDirs: vi.fn((cwd: string) => {
     const dataDir = path.join(cwd, '.engram-data');
     fs.mkdirSync(dataDir, { recursive: true });
@@ -17,7 +17,7 @@ vi.mock('../db/migrations.js', () => ({
 }));
 
 import { runInstall } from '../cli/install.js';
-import { ensureDataDirs } from '../adapters/claude-code/project-identity.js';
+import { ensureDataDirs } from '../core/project-identity.js';
 
 let tmpDir: string;
 

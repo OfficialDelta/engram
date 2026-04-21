@@ -3,8 +3,8 @@ import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildTurnCompleteEvent, appendEvent, getSessionEvents } from '../../core/event-stream.js';
-import { getDataDir, getDbPath, ensureDataDirs } from './project-identity.js';
-import { loadSessionState, saveSessionState } from './session-state.js';
+import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identity.js';
+import { loadSessionState, saveSessionState } from '../../core/session-state.js';
 import { spawnConsolidation } from '../../core/consolidation.js';
 
 const CONSOLIDATION_TURN_THRESHOLD = 5;

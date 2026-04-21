@@ -3,8 +3,8 @@ import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializeSchema } from '../../db/migrations.js';
-import { getDataDir, getDbPath } from './project-identity.js';
-import { buildContext } from './context-builder.js';
+import { getDataDir, getDbPath } from '../../core/project-identity.js';
+import { buildContext } from '../../core/context-builder.js';
 import { spreadingActivation } from '../../core/retrieval.js';
 import type { EntryPoint } from '../../types.js';
 

@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { ensureDataDirs, getDbPath } from '../adapters/claude-code/project-identity.js';
+import { ensureDataDirs, getDbPath } from '../core/project-identity.js';
 import { initializeSchema } from '../db/migrations.js';
 
 const HOOK_EVENTS = {

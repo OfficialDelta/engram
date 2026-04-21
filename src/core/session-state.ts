@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import type { ContradictionResult } from '../../types.js';
+import type { ContradictionResult } from '../types.js';
 
 export type SessionState = {
   seenFiles: string[];
