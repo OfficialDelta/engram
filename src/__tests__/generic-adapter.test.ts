@@ -164,11 +164,20 @@ describe('onSessionStart', () => {
   });
 
   it('returns non-empty context when prior session has file_write events and DB has connected nodes', () => {
+    // Create stub files so supersessionCheck doesn't mark nodes as superseded
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(path.join(srcDir, 'auth.ts'), '');
+    fs.writeFileSync(path.join(srcDir, 'token.ts'), '');
+
+    const absAuth = path.join(srcDir, 'auth.ts');
+    const absToken = path.join(srcDir, 'token.ts');
+
     const entryNode = createNode(session.db, {
       name: 'AuthModule',
       nodeType: 'concept',
       description: 'Authentication module',
-      affectedFiles: ['src/auth.ts'],
+      affectedFiles: [absAuth],
       strength: 1.0,
       metadata: {},
     });
@@ -176,7 +185,7 @@ describe('onSessionStart', () => {
       name: 'TokenStore',
       nodeType: 'pattern',
       description: 'Token storage pattern',
-      affectedFiles: ['src/token.ts'],
+      affectedFiles: [absToken],
       strength: 1.0,
       metadata: {},
     });
@@ -195,7 +204,7 @@ describe('onSessionStart', () => {
       type: 'file_write',
       sessionId: fakeSessionId,
       timestamp: new Date().toISOString(),
-      filePath: 'src/auth.ts',
+      filePath: absAuth,
       linesChanged: 10,
       evidenceSnippet: 'const auth = ...',
     };

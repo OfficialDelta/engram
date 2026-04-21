@@ -158,15 +158,35 @@ describe('Capture → Consolidate → Retrieve', () => {
     const { consolidateSession } = await import('../core/consolidation.js');
     const { processSessionStart } = await import('../adapters/claude-code/session-start.js');
 
+    // Create stub files so supersessionCheck doesn't mark nodes as superseded
+    fs.mkdirSync(path.join(tmpDir, 'src', 'utils'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'src', 'auth.ts'), '');
+    fs.writeFileSync(path.join(tmpDir, 'src', 'utils', 'crypto.ts'), '');
+
+    const absAuth = path.join(tmpDir, 'src', 'auth.ts');
+    const absCrypto = path.join(tmpDir, 'src', 'utils', 'crypto.ts');
+
+    // Override affectedFiles with absolute paths that exist on disk
+    const localPass2: typeof pass2Input = {
+      ...pass2Input,
+      changes: {
+        ...pass2Input.changes,
+        nodesToCreate: [
+          { ...pass2Input.changes.nodesToCreate[0]!, affectedFiles: [absAuth] },
+          { ...pass2Input.changes.nodesToCreate[1]!, affectedFiles: [absCrypto] },
+        ],
+      },
+    };
+
     // Only file_write to src/auth.ts so auth-middleware is the sole entry point;
     // bcrypt-hashing (linked to src/utils/crypto.ts) is reached via edge traversal.
-    appendEvent('sess-1', { type: 'file_read', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: 'src/auth.ts' }, tmpDir);
-    appendEvent('sess-1', { type: 'file_write', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: 'src/auth.ts', linesChanged: 10, evidenceSnippet: 'jwt middleware' }, tmpDir);
-    appendEvent('sess-1', { type: 'file_read', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: 'src/utils/crypto.ts' }, tmpDir);
+    appendEvent('sess-1', { type: 'file_read', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: absAuth }, tmpDir);
+    appendEvent('sess-1', { type: 'file_write', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: absAuth, linesChanged: 10, evidenceSnippet: 'jwt middleware' }, tmpDir);
+    appendEvent('sess-1', { type: 'file_read', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: absCrypto }, tmpDir);
     appendEvent('sess-1', { type: 'file_read', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: 'src/index.ts' }, tmpDir);
     appendEvent('sess-1', { type: 'test_run', sessionId: 'sess-1', timestamp: new Date().toISOString(), command: 'npm test', exitCode: 0, passed: true }, tmpDir);
 
-    const mockClient = createMockClient(pass1JSON, pass2Input);
+    const mockClient = createMockClient(pass1JSON, localPass2);
     await consolidateSession('sess-1', dbPath, tmpDir, { client: mockClient });
 
     const result = processSessionStart('sess-2', tmpDir, dbPath);
