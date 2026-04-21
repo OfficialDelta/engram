@@ -11,6 +11,8 @@ import {
   getConnectedNodes,
   getEdgesForNode,
   getNodesByName,
+  deleteNode,
+  deleteEdge,
   createEpisode,
 } from '../db/graph.js';
 import type { CreateNodeInput, CreateEdgeInput, CreateEpisodeInput } from '../types.js';
@@ -286,6 +288,81 @@ describe('graph CRUD operations', () => {
       const results = getNodesByName(db, 'does-not-exist');
       expect(results).toEqual([]);
 
+      db.close();
+    });
+  });
+
+  describe('deleteNode', () => {
+    it('removes node and all connected edges', () => {
+      const db = freshDb();
+      const a = createNode(db, makeNodeInput({ name: 'A' }));
+      const b = createNode(db, makeNodeInput({ name: 'B' }));
+      const c = createNode(db, makeNodeInput({ name: 'C' }));
+
+      createEdge(db, { sourceNodeId: a.id, targetNodeId: b.id, relationshipType: 'r', weight: 1, metadata: {} });
+      createEdge(db, { sourceNodeId: c.id, targetNodeId: a.id, relationshipType: 'r', weight: 1, metadata: {} });
+      createEdge(db, { sourceNodeId: b.id, targetNodeId: c.id, relationshipType: 'r', weight: 1, metadata: {} });
+
+      const deleted = deleteNode(db, a.id);
+      expect(deleted).toBe(true);
+
+      expect(getNode(db, a.id)).toBeUndefined();
+      expect(getEdgesForNode(db, a.id)).toEqual([]);
+
+      // b→c edge should survive
+      const bcEdges = getEdgesForNode(db, b.id);
+      expect(bcEdges).toHaveLength(1);
+
+      db.close();
+    });
+
+    it('removes node embedding from node_embeddings', () => {
+      const db = freshDb();
+      const node = createNode(db, makeNodeInput({ name: 'embedded' }));
+
+      const dim = (db.prepare("SELECT value FROM metadata WHERE key = 'embedding_dimension'").get() as { value: string }).value;
+      const vector = new Float32Array(Number(dim)).fill(0.1);
+      const buf = Buffer.from(vector.buffer);
+      db.prepare('DELETE FROM node_embeddings WHERE node_id = ?').run(node.id);
+      db.prepare('INSERT INTO node_embeddings(node_id, embedding) VALUES (?, ?)').run(node.id, buf);
+
+      deleteNode(db, node.id);
+
+      const row = db.prepare('SELECT node_id FROM node_embeddings WHERE node_id = ?').get(node.id);
+      expect(row).toBeUndefined();
+
+      db.close();
+    });
+
+    it('returns false for non-existent node', () => {
+      const db = freshDb();
+      const result = deleteNode(db, 'non-existent-id');
+      expect(result).toBe(false);
+      db.close();
+    });
+  });
+
+  describe('deleteEdge', () => {
+    it('removes a single edge without affecting nodes', () => {
+      const db = freshDb();
+      const a = createNode(db, makeNodeInput({ name: 'A' }));
+      const b = createNode(db, makeNodeInput({ name: 'B' }));
+      const edge = createEdge(db, { sourceNodeId: a.id, targetNodeId: b.id, relationshipType: 'r', weight: 1, metadata: {} });
+
+      const deleted = deleteEdge(db, edge.id);
+      expect(deleted).toBe(true);
+
+      expect(getEdgesForNode(db, a.id)).toEqual([]);
+      expect(getNode(db, a.id)).toBeDefined();
+      expect(getNode(db, b.id)).toBeDefined();
+
+      db.close();
+    });
+
+    it('returns false for non-existent edge', () => {
+      const db = freshDb();
+      const result = deleteEdge(db, 'non-existent-edge');
+      expect(result).toBe(false);
       db.close();
     });
   });

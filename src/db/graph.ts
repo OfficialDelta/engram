@@ -237,6 +237,21 @@ export function getNodesByName(db: Database, name: string): GraphNode[] {
   return rows.map(rowToNode);
 }
 
+export function deleteNode(db: Database, nodeId: string): boolean {
+  const existing = db.prepare('SELECT id FROM nodes WHERE id = ?').get(nodeId) as { id: string } | undefined;
+  if (!existing) return false;
+
+  db.prepare('DELETE FROM edges WHERE source_node_id = ? OR target_node_id = ?').run(nodeId, nodeId);
+  db.prepare('DELETE FROM node_embeddings WHERE node_id = ?').run(nodeId);
+  db.prepare('DELETE FROM nodes WHERE id = ?').run(nodeId);
+  return true;
+}
+
+export function deleteEdge(db: Database, edgeId: string): boolean {
+  const result = db.prepare('DELETE FROM edges WHERE id = ?').run(edgeId);
+  return result.changes > 0;
+}
+
 export function createEpisode(db: Database, input: CreateEpisodeInput): Episode {
   const id = crypto.randomUUID();
   db.prepare(
