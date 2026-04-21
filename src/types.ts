@@ -44,3 +44,100 @@ export type EmbeddingSearchResult = {
   distance: number;
   similarity: number;
 };
+
+// Event stream types
+
+export type RawToolCall = {
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  session_id: string;
+};
+
+type BaseEvent = {
+  type: string;
+  sessionId: string;
+  timestamp: string;
+};
+
+export type FileReadEvent = BaseEvent & {
+  type: 'file_read';
+  filePath: string;
+};
+
+export type FileWriteEvent = BaseEvent & {
+  type: 'file_write';
+  filePath: string;
+  linesChanged: number;
+  evidenceSnippet: string;
+};
+
+export type TestRunEvent = BaseEvent & {
+  type: 'test_run';
+  command: string;
+  exitCode: number;
+  passed: boolean;
+};
+
+export type BuildEvent = BaseEvent & {
+  type: 'build';
+  command: string;
+  exitCode: number;
+};
+
+export type ResearchEvent = BaseEvent & {
+  type: 'research';
+  query: string;
+};
+
+export type DecisionEvent = BaseEvent & {
+  type: 'decision';
+  content: string;
+  rationale: string;
+  affectedFiles: string[];
+};
+
+export type ExplorationEvent = BaseEvent & {
+  type: 'exploration';
+  filePath: string;
+};
+
+export type FixAttemptEvent = BaseEvent & {
+  type: 'fix_attempt';
+  filePath: string;
+};
+
+export type ProgressionEvent = BaseEvent & {
+  type: 'progression';
+  filePath: string;
+};
+
+export type ExpandingSearchEvent = BaseEvent & {
+  type: 'expanding_search';
+  filePaths: string[];
+};
+
+export type RepeatedRevisionEvent = BaseEvent & {
+  type: 'repeated_revision';
+  filePath: string;
+  count: number;
+};
+
+export type TurnCompleteEvent = BaseEvent & {
+  type: 'turn_complete';
+  toolCallCount: number;
+  turnNumber: number;
+};
+
+export type EngramEvent =
+  | FileReadEvent
+  | FileWriteEvent
+  | TestRunEvent
+  | BuildEvent
+  | ResearchEvent
+  | DecisionEvent
+  | ExplorationEvent
+  | FixAttemptEvent
+  | ProgressionEvent
+  | ExpandingSearchEvent
+  | RepeatedRevisionEvent
+  | TurnCompleteEvent;
