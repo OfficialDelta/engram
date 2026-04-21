@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { getDataDir, getDbPath } from '../core/project-identity.js';
 import { Database } from '../db/migrations.js';
+import { loadConfig, maskApiKey } from '../core/config.js';
+import { findUnconsolidatedSessions, findFailedConsolidations } from '../core/consolidation.js';
 
 const HOOK_EVENT_NAMES = ['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop'] as const;
 
@@ -35,6 +37,10 @@ export interface StatusResult {
   hooksRegistered: string[];
   hooksMissing: string[];
   dbError?: string;
+  configValid: boolean;
+  embeddingProvider: string | null;
+  pendingConsolidations: number;
+  failedConsolidations: Array<{ sessionId: string; error: string; timestamp: string }>;
 }
 
 interface DbStats {
@@ -114,6 +120,25 @@ export function runStatus(options: StatusOptions): StatusResult {
   const settingsPath = join(options.claudeConfigDir, 'settings.json');
   const { registered, missing } = checkHooksRegistered(settingsPath);
 
+  let configValid = false;
+  let embeddingProvider: string | null = null;
+  try {
+    const config = loadConfig();
+    configValid = !!config.llm.apiKey;
+    embeddingProvider = config.embedding.provider ?? null;
+  } catch {
+    configValid = false;
+  }
+
+  let pendingConsolidations = 0;
+  let failedConsolidations: Array<{ sessionId: string; error: string; timestamp: string }> = [];
+  try {
+    pendingConsolidations = findUnconsolidatedSessions(dataDir).length;
+  } catch { /* graceful degradation per P009 */ }
+  try {
+    failedConsolidations = findFailedConsolidations(dataDir);
+  } catch { /* graceful degradation per P009 */ }
+
   const base = {
     dataDir,
     dataDirExists,
@@ -125,6 +150,10 @@ export function runStatus(options: StatusOptions): StatusResult {
     lastConsolidation,
     hooksRegistered: registered,
     hooksMissing: missing,
+    configValid,
+    embeddingProvider,
+    pendingConsolidations,
+    failedConsolidations,
   };
   if (dbError !== undefined) {
     return { ...base, dbError };
@@ -149,6 +178,15 @@ export function formatStatus(result: StatusResult): string {
   lines.push(`  Database:        ${result.dbPath}  [${dbTag}]`);
 
   lines.push('');
+  lines.push('  Config:');
+  if (result.configValid) {
+    lines.push('    API key:            configured');
+  } else {
+    lines.push('    API key:            not configured — run engram config');
+  }
+  lines.push(`    Embedding provider: ${result.embeddingProvider ?? 'none'}`);
+
+  lines.push('');
   lines.push('  Graph:');
   if (result.dbExists && !result.dbError) {
     lines.push(`    Nodes:              ${result.nodes}`);
@@ -157,6 +195,18 @@ export function formatStatus(result: StatusResult): string {
     lines.push(`    Last consolidation: ${result.lastConsolidation ?? 'none'}`);
   } else {
     lines.push('    (no data)');
+  }
+
+  lines.push('');
+  lines.push('  Consolidation:');
+  lines.push(`    Pending: ${result.pendingConsolidations}`);
+  lines.push(`    Failed:  ${result.failedConsolidations.length}`);
+  if (result.failedConsolidations.length > 0) {
+    const sorted = [...result.failedConsolidations].sort(
+      (a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0),
+    );
+    const last = sorted[0]!;
+    lines.push(`    Recent error: [${last.sessionId}] ${last.error}`);
   }
 
   const total = HOOK_EVENT_NAMES.length;
