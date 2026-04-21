@@ -15,7 +15,7 @@ import { initializeSchema } from '../db/migrations.js';
 import { getSessionEvents } from './event-stream.js';
 import { computeStrength } from './strength.js';
 import { resolveEntity } from './entity-resolution.js';
-import { getEmbedding } from './embed.js';
+import { getEmbedding, getDimensions } from './embed.js';
 import { createNode, updateNode, createEdge, createEpisode, getNode } from '../db/graph.js';
 import { storeEmbedding } from '../db/embeddings.js';
 
@@ -362,7 +362,8 @@ export async function consolidateSession(
   const events = getSessionEvents(sessionId, dataDir);
   if (events.length === 0) return;
 
-  const db = initializeSchema(dbPath);
+  const embeddingProvider = config?.embeddingConfig?.provider ?? 'voyage-3-lite';
+  const db = initializeSchema(dbPath, getDimensions(embeddingProvider), embeddingProvider);
 
   try {
     const windows = windowEvents(events, windowSize, windowOverlap);

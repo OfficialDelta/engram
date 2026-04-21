@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS metadata (
   value TEXT NOT NULL
 );
 
+-- Dimension value (FLOAT[N]) is managed by initializeSchema() in migrations.ts.
+-- This file is a reference copy; migrations.ts is authoritative for the runtime dimension.
 CREATE VIRTUAL TABLE IF NOT EXISTS node_embeddings USING vec0(
   node_id TEXT PRIMARY KEY,
   embedding FLOAT[512] distance_metric=cosine

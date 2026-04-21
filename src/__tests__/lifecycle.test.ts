@@ -12,6 +12,7 @@ vi.mock('../core/embed.js', () => ({
       return Array.from({ length: 512 }, (_, i) => Math.sin(h * 0.001 + i * 0.1));
     });
   }),
+  getDimensions: vi.fn().mockReturnValue(512),
 }));
 
 vi.mock('../core/consolidation.js', async (importOriginal) => {

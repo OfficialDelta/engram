@@ -10,6 +10,7 @@ function mockEmbedding(): number[] {
 
 vi.mock('../core/embed.ts', () => ({
   getEmbedding: vi.fn().mockResolvedValue([Array.from({ length: 512 }, (_, i) => (i + 1) / 512)]),
+  getDimensions: vi.fn().mockReturnValue(512),
 }));
 
 vi.mock('../core/entity-resolution.ts', () => ({
