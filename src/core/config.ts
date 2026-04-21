@@ -11,6 +11,15 @@ export type EngramConfig = {
     windowSize?: number;
     windowOverlap?: number;
   };
+  maintenance?: {
+    decayThreshold?: number;
+    decayFactor?: number;
+  };
+};
+
+const MAINTENANCE_DEFAULTS = {
+  decayThreshold: 0.05,
+  decayFactor: 0.9,
 };
 
 const DEFAULTS: EngramConfig = {
@@ -47,6 +56,7 @@ export function loadConfig(overridePath?: string): EngramConfig {
     llm: { ...DEFAULTS.llm, ...fileConfig.llm },
     embedding: { ...DEFAULTS.embedding, ...fileConfig.embedding },
     consolidation: { ...DEFAULTS.consolidation, ...fileConfig.consolidation },
+    ...(fileConfig.maintenance ? { maintenance: { ...fileConfig.maintenance } } : {}),
   };
 
   // Env var overrides (highest priority)
@@ -106,7 +116,31 @@ export function validateConfig(config: unknown): { valid: boolean; errors: strin
     }
   }
 
+  if (c.maintenance && typeof c.maintenance === 'object') {
+    const maint = c.maintenance as Record<string, unknown>;
+    for (const key of ['decayThreshold', 'decayFactor'] as const) {
+      if (maint[key] !== undefined) {
+        if (typeof maint[key] !== 'number' || maint[key] <= 0) {
+          errors.push(`maintenance.${key} must be a positive number`);
+        }
+      }
+    }
+    if (typeof maint.decayThreshold === 'number' && maint.decayThreshold >= 1) {
+      errors.push('maintenance.decayThreshold must be less than 1');
+    }
+    if (typeof maint.decayFactor === 'number' && maint.decayFactor >= 1) {
+      errors.push('maintenance.decayFactor must be less than 1');
+    }
+  }
+
   return { valid: errors.length === 0, errors };
+}
+
+export function getMaintenanceConfig(config: EngramConfig): { decayThreshold: number; decayFactor: number } {
+  return {
+    decayThreshold: config.maintenance?.decayThreshold ?? MAINTENANCE_DEFAULTS.decayThreshold,
+    decayFactor: config.maintenance?.decayFactor ?? MAINTENANCE_DEFAULTS.decayFactor,
+  };
 }
 
 export function maskApiKey(key: string): string {

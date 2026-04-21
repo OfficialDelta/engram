@@ -8,6 +8,7 @@ import {
   validateConfig,
   maskApiKey,
   getConfigPath,
+  getMaintenanceConfig,
   type EngramConfig,
 } from '../core/config.js';
 
@@ -203,6 +204,85 @@ describe('validateConfig', () => {
   it('accepts empty object', () => {
     const result = validateConfig({});
     expect(result.valid).toBe(true);
+  });
+});
+
+describe('getMaintenanceConfig', () => {
+  it('returns defaults when maintenance section is absent', () => {
+    const config: EngramConfig = { llm: {}, embedding: {}, consolidation: {} };
+    const result = getMaintenanceConfig(config);
+    expect(result).toEqual({ decayThreshold: 0.05, decayFactor: 0.9 });
+  });
+
+  it('returns defaults when maintenance section is empty', () => {
+    const config: EngramConfig = { llm: {}, embedding: {}, consolidation: {}, maintenance: {} };
+    const result = getMaintenanceConfig(config);
+    expect(result).toEqual({ decayThreshold: 0.05, decayFactor: 0.9 });
+  });
+
+  it('uses provided values over defaults', () => {
+    const config: EngramConfig = {
+      llm: {}, embedding: {}, consolidation: {},
+      maintenance: { decayThreshold: 0.1, decayFactor: 0.8 },
+    };
+    const result = getMaintenanceConfig(config);
+    expect(result).toEqual({ decayThreshold: 0.1, decayFactor: 0.8 });
+  });
+
+  it('merges partial overrides with defaults', () => {
+    const config: EngramConfig = {
+      llm: {}, embedding: {}, consolidation: {},
+      maintenance: { decayThreshold: 0.2 },
+    };
+    const result = getMaintenanceConfig(config);
+    expect(result.decayThreshold).toBe(0.2);
+    expect(result.decayFactor).toBe(0.9);
+  });
+});
+
+describe('validateConfig maintenance', () => {
+  it('accepts valid maintenance config', () => {
+    const result = validateConfig({ maintenance: { decayThreshold: 0.05, decayFactor: 0.9 } });
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects non-numeric decayThreshold', () => {
+    const result = validateConfig({ maintenance: { decayThreshold: 'low' } });
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/maintenance.decayThreshold must be a positive number/);
+  });
+
+  it('rejects decayThreshold >= 1', () => {
+    const result = validateConfig({ maintenance: { decayThreshold: 1.0 } });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([expect.stringMatching(/decayThreshold must be less than 1/)]));
+  });
+
+  it('rejects decayFactor >= 1', () => {
+    const result = validateConfig({ maintenance: { decayFactor: 1.5 } });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([expect.stringMatching(/decayFactor must be less than 1/)]));
+  });
+
+  it('rejects zero decayFactor', () => {
+    const result = validateConfig({ maintenance: { decayFactor: 0 } });
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/maintenance.decayFactor must be a positive number/);
+  });
+});
+
+describe('loadConfig with maintenance', () => {
+  it('loads maintenance section from config file', () => {
+    const fileConfig = { maintenance: { decayThreshold: 0.1, decayFactor: 0.85 } };
+    fs.writeFileSync(configPath, JSON.stringify(fileConfig));
+    const config = loadConfig(configPath);
+    expect(config.maintenance).toEqual({ decayThreshold: 0.1, decayFactor: 0.85 });
+  });
+
+  it('omits maintenance when not in config file', () => {
+    fs.writeFileSync(configPath, JSON.stringify({ llm: {} }));
+    const config = loadConfig(configPath);
+    expect(config.maintenance).toBeUndefined();
   });
 });
 
