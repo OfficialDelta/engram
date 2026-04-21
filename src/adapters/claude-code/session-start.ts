@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, readdirSync, appendFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { initializeSchema } from '../../db/migrations.js';
 import { getDataDir, getDbPath, ensureDataDirs } from './project-identity.js';
 import { saveSessionState, type SessionState } from './session-state.js';
@@ -19,7 +20,7 @@ function logError(dataDir: string, message: string): void {
   }
 }
 
-function getRecentFileEntryPoints(dataDir: string): EntryPoint[] {
+export function getRecentFileEntryPoints(dataDir: string): EntryPoint[] {
   try {
     const eventsDir = join(dataDir, 'events');
     const files = readdirSync(eventsDir).filter(f => f.endsWith('.jsonl'));
@@ -65,16 +66,11 @@ function getRecentFileEntryPoints(dataDir: string): EntryPoint[] {
   }
 }
 
-try {
-  const stdin = readFileSync('/dev/stdin', 'utf-8');
-  const input = JSON.parse(stdin) as Record<string, unknown>;
-
-  const cwd = (input.cwd as string) ?? process.cwd();
-  const sessionId = input.session_id as string;
-
-  const dataDir = ensureDataDirs(cwd);
-  const dbPath = getDbPath(cwd);
-
+export function processSessionStart(
+  sessionId: string,
+  dataDir: string,
+  dbPath: string,
+): Record<string, unknown> {
   const db = initializeSchema(dbPath);
 
   const unconsolidated = findUnconsolidatedSessions(dataDir);
@@ -106,24 +102,43 @@ try {
   db.close();
 
   if (additionalContext) {
-    process.stdout.write(JSON.stringify({
+    return {
       hookSpecificOutput: {
         hookEventName: 'SessionStart',
         additionalContext,
       },
-    }));
-  } else {
-    process.stdout.write('{}');
+    };
   }
-  process.exit(0);
-} catch (err) {
+  return {};
+}
+
+function main(): void {
   try {
-    const cwd = process.cwd();
-    const dataDir = getDataDir(cwd);
-    logError(dataDir, `SessionStart handler error: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
-  } catch {
-    // final fallback
+    const stdin = readFileSync('/dev/stdin', 'utf-8');
+    const input = JSON.parse(stdin) as Record<string, unknown>;
+
+    const cwd = (input.cwd as string) ?? process.cwd();
+    const sessionId = input.session_id as string;
+
+    const dataDir = ensureDataDirs(cwd);
+    const dbPath = getDbPath(cwd);
+
+    const result = processSessionStart(sessionId, dataDir, dbPath);
+    process.stdout.write(JSON.stringify(result));
+    process.exit(0);
+  } catch (err) {
+    try {
+      const cwd = process.cwd();
+      const dataDir = getDataDir(cwd);
+      logError(dataDir, `SessionStart handler error: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+    } catch {
+      // final fallback
+    }
+    process.stdout.write('{}');
+    process.exit(0);
   }
-  process.stdout.write('{}');
-  process.exit(0);
+}
+
+if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  main();
 }

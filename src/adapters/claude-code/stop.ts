@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildTurnCompleteEvent, appendEvent, getSessionEvents } from '../../core/event-stream.js';
 import { getDataDir, getDbPath, ensureDataDirs } from './project-identity.js';
 import { loadSessionState, saveSessionState } from './session-state.js';
@@ -19,16 +20,11 @@ function logError(dataDir: string, message: string): void {
   }
 }
 
-try {
-  const stdin = readFileSync('/dev/stdin', 'utf-8');
-  const input = JSON.parse(stdin) as Record<string, unknown>;
-
-  const cwd = (input.cwd as string) ?? process.cwd();
-  const sessionId = input.session_id as string;
-
-  const dataDir = ensureDataDirs(cwd);
-  const dbPath = getDbPath(cwd);
-
+export function processStop(
+  sessionId: string,
+  dataDir: string,
+  dbPath: string,
+): Record<string, unknown> {
   const state = loadSessionState(dataDir, sessionId);
   state.turnCount++;
 
@@ -46,16 +42,36 @@ try {
     spawnConsolidation(sessionId, dbPath, dataDir);
   }
 
-  process.stdout.write('{}');
-  process.exit(0);
-} catch (err) {
+  return {};
+}
+
+function main(): void {
   try {
-    const cwd = process.cwd();
-    const dataDir = getDataDir(cwd);
-    logError(dataDir, `Stop handler error: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
-  } catch {
-    // final fallback
+    const stdin = readFileSync('/dev/stdin', 'utf-8');
+    const input = JSON.parse(stdin) as Record<string, unknown>;
+
+    const cwd = (input.cwd as string) ?? process.cwd();
+    const sessionId = input.session_id as string;
+
+    const dataDir = ensureDataDirs(cwd);
+    const dbPath = getDbPath(cwd);
+
+    processStop(sessionId, dataDir, dbPath);
+    process.stdout.write('{}');
+    process.exit(0);
+  } catch (err) {
+    try {
+      const cwd = process.cwd();
+      const dataDir = getDataDir(cwd);
+      logError(dataDir, `Stop handler error: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+    } catch {
+      // final fallback
+    }
+    process.stdout.write('{}');
+    process.exit(0);
   }
-  process.stdout.write('{}');
-  process.exit(0);
+}
+
+if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  main();
 }

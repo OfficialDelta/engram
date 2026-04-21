@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { ensureDataDirs, getDbPath } from '../adapters/claude-code/project-identity.js';
@@ -37,8 +37,7 @@ function readSettings(settingsPath: string): Record<string, unknown> {
   try {
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    console.error(`Error: ${settingsPath} contains malformed JSON. Fix it manually and re-run.`);
-    process.exit(1);
+    throw new Error(`${settingsPath} contains malformed JSON. Fix it manually and re-run.`);
   }
 }
 
@@ -90,14 +89,19 @@ function validateInstall(settingsPath: string): string[] {
   return missing;
 }
 
-function main(): void {
-  const args = process.argv.slice(2);
-  if (args.includes('--help')) {
-    printUsage();
-    process.exit(0);
-  }
+export interface InstallOptions {
+  claudeConfigDir: string;
+  cwd: string;
+  hookDir?: string;
+}
 
-  const hookDir = resolveHookDir();
+export function runInstall(options: InstallOptions): {
+  warnings: string[];
+  settingsPath: string;
+  dataDir: string;
+  dbPath: string;
+} {
+  const hookDir = options.hookDir ?? resolveHookDir();
   const warnings: string[] = [];
 
   const missingHandlers = Object.values(HOOK_EVENTS).filter(
@@ -110,36 +114,55 @@ function main(): void {
     );
   }
 
-  const claudeDir = join(homedir(), '.claude');
-  mkdirSync(claudeDir, { recursive: true });
+  mkdirSync(options.claudeConfigDir, { recursive: true });
 
-  const settingsPath = join(claudeDir, 'settings.json');
+  const settingsPath = join(options.claudeConfigDir, 'settings.json');
   const settings = readSettings(settingsPath);
   mergeHooks(settings, hookDir);
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 
-  const cwd = process.cwd();
-  const dataDir = ensureDataDirs(cwd);
-  const dbPath = getDbPath(cwd);
+  const dataDir = ensureDataDirs(options.cwd);
+  const dbPath = getDbPath(options.cwd);
   const db = initializeSchema(dbPath);
   db.close();
 
   const missing = validateInstall(settingsPath);
   if (missing.length > 0) {
-    console.error(`Error: Validation failed — missing hook entries for: ${missing.join(', ')}`);
-    process.exit(1);
+    throw new Error(`Validation failed — missing hook entries for: ${missing.join(', ')}`);
   }
 
-  console.log('engram installed successfully:\n');
-  console.log(`  ✓ Hooks registered in ${settingsPath}`);
-  console.log(`  ✓ Data directory created at ${dataDir}`);
-  console.log(`  ✓ Database initialized at ${dbPath}`);
-  if (warnings.length > 0) {
-    console.log('');
-    for (const w of warnings) {
-      console.log(`  ⚠ ${w}`);
+  return { warnings, settingsPath, dataDir, dbPath };
+}
+
+function main(): void {
+  const args = process.argv.slice(2);
+  if (args.includes('--help')) {
+    printUsage();
+    process.exit(0);
+  }
+
+  try {
+    const result = runInstall({
+      claudeConfigDir: join(homedir(), '.claude'),
+      cwd: process.cwd(),
+    });
+
+    console.log('engram installed successfully:\n');
+    console.log(`  ✓ Hooks registered in ${result.settingsPath}`);
+    console.log(`  ✓ Data directory created at ${result.dataDir}`);
+    console.log(`  ✓ Database initialized at ${result.dbPath}`);
+    if (result.warnings.length > 0) {
+      console.log('');
+      for (const w of result.warnings) {
+        console.log(`  ⚠ ${w}`);
+      }
     }
+  } catch (err) {
+    console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
   }
 }
 
-main();
+if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  main();
+}
