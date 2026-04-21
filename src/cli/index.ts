@@ -24,14 +24,23 @@ async function main(): Promise<void> {
   switch (subcommand) {
     case 'install': {
       try {
+        const gsd = process.argv.slice(3).includes('--gsd');
         const result = runInstall({
           claudeConfigDir: resolve(homedir(), '.claude'),
           cwd: process.cwd(),
+          gsd,
         });
         console.log('engram installed successfully:\n');
-        console.log(`  ✓ Hooks registered in ${result.settingsPath}`);
-        console.log(`  ✓ Data directory created at ${result.dataDir}`);
-        console.log(`  ✓ Database initialized at ${result.dbPath}`);
+        if (gsd) {
+          console.log(`  ✓ Extension installed at ${result.gsdExtensionPath}`);
+          console.log(`  ✓ Data directory created at ${result.dataDir}`);
+          console.log(`  ✓ Database initialized at ${result.dbPath}`);
+          console.log('\n  Run `gsd trust` or `pi trust` in this project to allow the extension to load.');
+        } else {
+          console.log(`  ✓ Hooks registered in ${result.settingsPath}`);
+          console.log(`  ✓ Data directory created at ${result.dataDir}`);
+          console.log(`  ✓ Database initialized at ${result.dbPath}`);
+        }
         if (result.warnings.length > 0) {
           console.log('');
           for (const w of result.warnings) {

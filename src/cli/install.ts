@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -19,13 +19,20 @@ function resolveHookDir(): string {
   return join(distDir, 'adapters', 'claude-code');
 }
 
+function resolveGSDExtensionSource(): string {
+  const distCli = dirname(fileURLToPath(import.meta.url));
+  const distDir = dirname(distCli);
+  return join(distDir, 'adapters', 'gsd', 'index.js');
+}
+
 function printUsage(): void {
-  console.log(`Usage: engram install
+  console.log(`Usage: engram install [options]
 
 Registers engram hooks in ~/.claude/settings.json,
 creates data directories, and initializes the database.
 
 Options:
+  --gsd   Install as a GSD ecosystem extension instead of Claude Code hooks
   --help  Show this help message`);
 }
 
@@ -93,6 +100,7 @@ export interface InstallOptions {
   claudeConfigDir: string;
   cwd: string;
   hookDir?: string;
+  gsd?: boolean;
 }
 
 export function runInstall(options: InstallOptions): {
@@ -100,9 +108,33 @@ export function runInstall(options: InstallOptions): {
   settingsPath: string;
   dataDir: string;
   dbPath: string;
+  gsdExtensionPath?: string;
 } {
-  const hookDir = options.hookDir ?? resolveHookDir();
   const warnings: string[] = [];
+
+  const dataDir = ensureDataDirs(options.cwd);
+  const dbPath = getDbPath(options.cwd);
+  const db = initializeSchema(dbPath);
+  db.close();
+
+  if (options.gsd) {
+    const source = resolveGSDExtensionSource();
+    if (!existsSync(source)) {
+      warnings.push(
+        'GSD extension file not found at expected path. ' +
+        'If running via npx from a temp cache, install globally instead: npm install -g engram',
+      );
+    }
+
+    const extensionsDir = join(options.cwd, '.gsd', 'extensions');
+    mkdirSync(extensionsDir, { recursive: true });
+    const dest = join(extensionsDir, 'engram.js');
+    copyFileSync(source, dest);
+
+    return { warnings, settingsPath: '', dataDir, dbPath, gsdExtensionPath: dest };
+  }
+
+  const hookDir = options.hookDir ?? resolveHookDir();
 
   const missingHandlers = Object.values(HOOK_EVENTS).filter(
     (config) => !existsSync(join(hookDir, `${config.handler}.js`)),
@@ -120,11 +152,6 @@ export function runInstall(options: InstallOptions): {
   const settings = readSettings(settingsPath);
   mergeHooks(settings, hookDir);
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-
-  const dataDir = ensureDataDirs(options.cwd);
-  const dbPath = getDbPath(options.cwd);
-  const db = initializeSchema(dbPath);
-  db.close();
 
   const missing = validateInstall(settingsPath);
   if (missing.length > 0) {
