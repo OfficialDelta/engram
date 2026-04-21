@@ -9,6 +9,8 @@ import {
   getNodesByFile,
   getDecisionNodesForFile,
   getConnectedNodes,
+  getEdgesForNode,
+  getNodesByName,
   createEpisode,
 } from '../db/graph.js';
 import type { CreateNodeInput, CreateEdgeInput, CreateEpisodeInput } from '../types.js';
@@ -227,6 +229,62 @@ describe('graph CRUD operations', () => {
       const names = result.map(n => n.name);
 
       expect(names).toEqual(['A']);
+
+      db.close();
+    });
+  });
+
+  describe('getEdgesForNode', () => {
+    it('returns edges where node is source or target', () => {
+      const db = freshDb();
+      const a = createNode(db, makeNodeInput({ name: 'A' }));
+      const b = createNode(db, makeNodeInput({ name: 'B' }));
+      const c = createNode(db, makeNodeInput({ name: 'C' }));
+
+      const e1 = createEdge(db, { sourceNodeId: a.id, targetNodeId: b.id, relationshipType: 'r', weight: 0.5, metadata: {} });
+      const e2 = createEdge(db, { sourceNodeId: c.id, targetNodeId: a.id, relationshipType: 'r', weight: 0.7, metadata: {} });
+      createEdge(db, { sourceNodeId: b.id, targetNodeId: c.id, relationshipType: 'r', weight: 1, metadata: {} });
+
+      const edges = getEdgesForNode(db, a.id);
+      const edgeIds = edges.map(e => e.id).sort();
+
+      expect(edges).toHaveLength(2);
+      expect(edgeIds).toEqual([e1.id, e2.id].sort());
+
+      db.close();
+    });
+
+    it('returns empty array for isolated node', () => {
+      const db = freshDb();
+      const a = createNode(db, makeNodeInput({ name: 'isolated' }));
+
+      const edges = getEdgesForNode(db, a.id);
+      expect(edges).toEqual([]);
+
+      db.close();
+    });
+  });
+
+  describe('getNodesByName', () => {
+    it('returns nodes with exact name match', () => {
+      const db = freshDb();
+      createNode(db, makeNodeInput({ name: 'alpha' }));
+      createNode(db, makeNodeInput({ name: 'alpha' }));
+      createNode(db, makeNodeInput({ name: 'beta' }));
+
+      const results = getNodesByName(db, 'alpha');
+      expect(results).toHaveLength(2);
+      expect(results.every(n => n.name === 'alpha')).toBe(true);
+
+      db.close();
+    });
+
+    it('returns empty array for non-existent name', () => {
+      const db = freshDb();
+      createNode(db, makeNodeInput({ name: 'exists' }));
+
+      const results = getNodesByName(db, 'does-not-exist');
+      expect(results).toEqual([]);
 
       db.close();
     });

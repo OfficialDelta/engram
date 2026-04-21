@@ -223,6 +223,20 @@ export function getConnectedNodes(db: Database, nodeId: string, depth: number = 
   return rows.map(rowToNode);
 }
 
+export function getEdgesForNode(db: Database, nodeId: string): GraphEdge[] {
+  const rows = db.prepare(
+    'SELECT * FROM edges WHERE source_node_id = ? OR target_node_id = ?'
+  ).all(nodeId, nodeId) as EdgeRow[];
+  return rows.map(rowToEdge);
+}
+
+export function getNodesByName(db: Database, name: string): GraphNode[] {
+  const rows = db.prepare(
+    'SELECT * FROM nodes WHERE name = ?'
+  ).all(name) as NodeRow[];
+  return rows.map(rowToNode);
+}
+
 export function createEpisode(db: Database, input: CreateEpisodeInput): Episode {
   const id = crypto.randomUUID();
   db.prepare(

@@ -202,3 +202,33 @@ export type ConsolidationConfig = {
   windowOverlap?: number;
   embeddingConfig?: { provider?: string; apiKey?: string };
 };
+
+export type EntryPoint = {
+  type: 'file' | 'name' | 'node';
+  value: string;
+};
+
+export type RetrievalConfig = {
+  decayFactor?: number;
+  activationThreshold?: number;
+  maxDepth?: number;
+  tierBoundaries?: { high: number; medium: number };
+};
+
+export type NodeResult = {
+  node: GraphNode;
+  activation: number;
+};
+
+export type TieredResults = {
+  high: NodeResult[];
+  medium: NodeResult[];
+  low: NodeResult[];
+};
+
+export type Annotation = {
+  nodeId: string;
+  name: string;
+  description: string;
+  strength: number;
+};
