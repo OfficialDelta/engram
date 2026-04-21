@@ -17,7 +17,12 @@ Commands:
   config      Show, set, or interactively configure engram settings
   mcp         Start MCP server exposing engram tools
 
-Run 'engram <command> --help' for more information on a command.`);
+Run 'engram <command> --help' for more information on a command.
+
+Getting started:
+  1. engram install        Set up hooks for this project
+  2. engram config         Configure API keys and providers
+  3. engram status         Check system health`);
 }
 
 async function main(): Promise<void> {
@@ -51,6 +56,7 @@ async function main(): Promise<void> {
         }
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`Try running "engram status" to check your setup.`);
         process.exit(1);
       }
       break;
@@ -60,6 +66,22 @@ async function main(): Promise<void> {
       break;
     }
     case 'mcp': {
+      if (process.argv.slice(3).includes('--help')) {
+        console.log(`Usage: engram mcp
+
+Start the MCP (Model Context Protocol) server exposing engram tools.
+
+The server communicates over stdio and exposes two tools:
+  query_knowledge   Query the engram knowledge graph with a natural language question
+  save_decision     Save a decision to the engram knowledge graph for future retrieval
+
+To configure in Claude Code, add to .claude/settings.json:
+  { "mcpServers": { "engram": { "command": "engram", "args": ["mcp"] } } }
+
+Options:
+  --help  Show this help message`);
+        break;
+      }
       const { runMcp } = await import('./mcp.js');
       await runMcp(process.cwd());
       break;
@@ -96,10 +118,12 @@ async function main(): Promise<void> {
     }
     default:
       if (subcommand && subcommand !== '--help' && subcommand !== '-h') {
-        console.error(`Unknown command: ${subcommand}\n`);
+        console.error(`Unknown command: ${subcommand}\n\nRun 'engram --help' for available commands.\nDid you mean: install, uninstall, status, config, mcp?\n`);
+        process.exit(1);
+        break;
       }
       printUsage();
-      process.exit(subcommand ? 1 : 0);
+      process.exit(0);
       break;
   }
 }
