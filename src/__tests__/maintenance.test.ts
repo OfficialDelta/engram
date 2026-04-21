@@ -218,9 +218,9 @@ describe('patternScan', () => {
       createNode(db, makeNodeInput({ name: `concept-${i}`, nodeType: 'concept', strength: 1.0 })),
     );
     // 3 edges: concept→concept with relationship_type 'related'
-    createEdge(db, makeEdgeInput(nodes[0].id, nodes[1].id, 'related'));
-    createEdge(db, makeEdgeInput(nodes[2].id, nodes[3].id, 'related'));
-    createEdge(db, makeEdgeInput(nodes[4].id, nodes[5].id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[0]!.id, nodes[1]!.id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[2]!.id, nodes[3]!.id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[4]!.id, nodes[5]!.id, 'related'));
 
     const result = patternScan(db);
 
@@ -237,8 +237,8 @@ describe('patternScan', () => {
     const nodes = Array.from({ length: 4 }, (_, i) =>
       createNode(db, makeNodeInput({ name: `concept-${i}`, nodeType: 'concept', strength: 1.0 })),
     );
-    createEdge(db, makeEdgeInput(nodes[0].id, nodes[1].id, 'related'));
-    createEdge(db, makeEdgeInput(nodes[2].id, nodes[3].id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[0]!.id, nodes[1]!.id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[2]!.id, nodes[3]!.id, 'related'));
 
     const result = patternScan(db);
 
@@ -252,9 +252,9 @@ describe('patternScan', () => {
     const nodes = Array.from({ length: 6 }, (_, i) =>
       createNode(db, makeNodeInput({ name: `concept-${i}`, nodeType: 'concept', strength: 1.0 })),
     );
-    createEdge(db, makeEdgeInput(nodes[0].id, nodes[1].id, 'related'));
-    createEdge(db, makeEdgeInput(nodes[2].id, nodes[3].id, 'related'));
-    createEdge(db, makeEdgeInput(nodes[4].id, nodes[5].id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[0]!.id, nodes[1]!.id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[2]!.id, nodes[3]!.id, 'related'));
+    createEdge(db, makeEdgeInput(nodes[4]!.id, nodes[5]!.id, 'related'));
 
     const first = patternScan(db);
     expect(first.patternsCreated).toBe(1);
@@ -275,9 +275,9 @@ describe('patternScan', () => {
       createNode(db, makeNodeInput({ name: `entity-${i}`, nodeType: 'entity', strength: 1.0 })),
     );
     // 3 edges but each crosses concept→entity — not same-type
-    createEdge(db, makeEdgeInput(concepts[0].id, entities[0].id, 'related'));
-    createEdge(db, makeEdgeInput(concepts[1].id, entities[1].id, 'related'));
-    createEdge(db, makeEdgeInput(concepts[2].id, entities[2].id, 'related'));
+    createEdge(db, makeEdgeInput(concepts[0]!.id, entities[0]!.id, 'related'));
+    createEdge(db, makeEdgeInput(concepts[1]!.id, entities[1]!.id, 'related'));
+    createEdge(db, makeEdgeInput(concepts[2]!.id, entities[2]!.id, 'related'));
 
     const result = patternScan(db);
 

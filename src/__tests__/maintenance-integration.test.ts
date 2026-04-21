@@ -55,9 +55,9 @@ describe('maintenance integration', () => {
       const concepts = Array.from({ length: 6 }, (_, i) =>
         createNode(db, makeNode({ name: `concept-${i}`, nodeType: 'concept', strength: 1.0 })),
       );
-      createEdge(db, makeEdge(concepts[0].id, concepts[1].id, 'related'));
-      createEdge(db, makeEdge(concepts[2].id, concepts[3].id, 'related'));
-      createEdge(db, makeEdge(concepts[4].id, concepts[5].id, 'related'));
+      createEdge(db, makeEdge(concepts[0]!.id, concepts[1]!.id, 'related'));
+      createEdge(db, makeEdge(concepts[2]!.id, concepts[3]!.id, 'related'));
+      createEdge(db, makeEdge(concepts[4]!.id, concepts[5]!.id, 'related'));
 
       // --- Supersession targets ---
       // A node whose affected_files all reference nonexistent paths

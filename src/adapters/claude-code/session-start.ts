@@ -35,7 +35,7 @@ export function processSessionStart(
     const maintConfig = getMaintenanceConfig(config);
     const maintResult = runMaintenance(db, dataDir, maintConfig);
     if (!maintResult.skipped) {
-      maintenanceSummary = `[engram] Maintenance: pruned ${maintResult.nodesPruned} stale nodes (${maintResult.durationMs}ms)\n\n`;
+      maintenanceSummary = `[engram] Maintenance: pruned ${maintResult.nodesPruned} stale nodes, ${maintResult.patternsCreated} patterns created, ${maintResult.filesSuperseded} files superseded (${maintResult.durationMs}ms)\n\n`;
     }
   } catch {
     // maintenance must never block session start
