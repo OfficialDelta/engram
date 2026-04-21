@@ -9,6 +9,8 @@ import { buildContext } from '../../core/context-builder.js';
 import { spreadingActivation } from '../../core/retrieval.js';
 import { findUnconsolidatedSessions, spawnConsolidation, findFailedConsolidations } from '../../core/consolidation.js';
 import { getRecentFileEntryPoints } from '../../core/entry-points.js';
+import { runMaintenance } from '../../core/maintenance.js';
+import { loadConfig, getMaintenanceConfig } from '../../core/config.js';
 
 function logError(dataDir: string, message: string): void {
   try {
@@ -26,6 +28,18 @@ export function processSessionStart(
   dbPath: string,
 ): Record<string, unknown> {
   const db = initializeSchema(dbPath);
+
+  let maintenanceSummary = '';
+  try {
+    const config = loadConfig();
+    const maintConfig = getMaintenanceConfig(config);
+    const maintResult = runMaintenance(db, dataDir, maintConfig);
+    if (!maintResult.skipped) {
+      maintenanceSummary = `[engram] Maintenance: pruned ${maintResult.nodesPruned} stale nodes (${maintResult.durationMs}ms)\n\n`;
+    }
+  } catch {
+    // maintenance must never block session start
+  }
 
   const unconsolidated = findUnconsolidatedSessions(dataDir);
   for (const oldSessionId of unconsolidated) {
@@ -63,6 +77,10 @@ export function processSessionStart(
   }
 
   db.close();
+
+  if (maintenanceSummary) {
+    additionalContext = maintenanceSummary + additionalContext;
+  }
 
   if (additionalContext) {
     return {

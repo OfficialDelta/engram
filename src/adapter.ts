@@ -8,6 +8,8 @@ import { buildContext } from './core/context-builder.js';
 import { spreadingActivation } from './core/retrieval.js';
 import { findUnconsolidatedSessions, spawnConsolidation } from './core/consolidation.js';
 import { extractEntryPoints, getRecentFileEntryPoints } from './core/entry-points.js';
+import { runMaintenance } from './core/maintenance.js';
+import { loadConfig, getMaintenanceConfig } from './core/config.js';
 import type { AdapterConfig, AdapterSession, ToolCallResult, RawToolCall, Annotation, FileReadEvent, FileWriteEvent } from './types.js';
 
 const CONSOLIDATION_TURN_THRESHOLD = 5;
@@ -96,6 +98,18 @@ export function onToolCall(session: AdapterSession, toolCall: RawToolCall): Tool
 export function onSessionStart(session: AdapterSession): { context: string } {
   const { sessionId, dataDir, dbPath, db } = session;
 
+  let maintenanceSummary = '';
+  try {
+    const config = loadConfig();
+    const maintConfig = getMaintenanceConfig(config);
+    const maintResult = runMaintenance(db, dataDir, maintConfig);
+    if (!maintResult.skipped) {
+      maintenanceSummary = `[engram] Maintenance: pruned ${maintResult.nodesPruned} stale nodes (${maintResult.durationMs}ms)\n\n`;
+    }
+  } catch {
+    // maintenance must never block session start
+  }
+
   const unconsolidated = findUnconsolidatedSessions(dataDir);
   for (const oldSessionId of unconsolidated) {
     spawnConsolidation(oldSessionId, dbPath, dataDir);
@@ -110,6 +124,10 @@ export function onSessionStart(session: AdapterSession): { context: string } {
     }
   } catch {
     // retrieval failures are non-fatal
+  }
+
+  if (maintenanceSummary) {
+    context = maintenanceSummary + context;
   }
 
   return { context };

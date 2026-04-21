@@ -34,6 +34,21 @@ vi.mock('../db/migrations.js', () => ({
   initializeSchema: vi.fn(() => ({ close: vi.fn() })),
 }));
 
+vi.mock('../core/maintenance.js', () => ({
+  runMaintenance: vi.fn(() => ({
+    nodesPruned: 0, patternsCreated: 0, filesSuperseded: 0, durationMs: 5, skipped: true,
+  })),
+}));
+
+vi.mock('../core/config.js', () => ({
+  loadConfig: vi.fn(() => ({
+    llm: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: '' },
+    embedding: { provider: 'local', model: 'all-MiniLM-L6-v2' },
+    consolidation: { turnThreshold: 5, eventThreshold: 50 },
+  })),
+  getMaintenanceConfig: vi.fn(() => ({ decayThreshold: 0.01, decayFactor: 0.9 })),
+}));
+
 import { getProjectHash, getDataDir, ensureDataDirs } from '../core/project-identity.js';
 import { loadSessionState, saveSessionState, type SessionState } from '../core/session-state.js';
 import { buildContext } from '../core/context-builder.js';
@@ -44,6 +59,7 @@ import { processStop } from '../adapters/claude-code/stop.js';
 import { classifyToolCall, buildTurnCompleteEvent, appendEvent } from '../core/event-stream.js';
 import { getFileAnnotations } from '../core/involuntary.js';
 import { findUnconsolidatedSessions, spawnConsolidation } from '../core/consolidation.js';
+import { runMaintenance } from '../core/maintenance.js';
 import type {
   ContradictionResult, Annotation, TieredResults,
   NodeResult, GraphNode, FileReadEvent, FileWriteEvent,
@@ -372,6 +388,34 @@ describe('SessionStart handler', () => {
     expect(spawnConsolidation).toHaveBeenCalledTimes(2);
     expect(spawnConsolidation).toHaveBeenCalledWith('old-1', dbPath, dir);
     expect(spawnConsolidation).toHaveBeenCalledWith('old-2', dbPath, dir);
+  });
+
+  it('calls runMaintenance and surfaces summary when not skipped', () => {
+    vi.mocked(runMaintenance).mockReturnValueOnce({
+      nodesPruned: 3, patternsCreated: 0, filesSuperseded: 0, durationMs: 42, skipped: false,
+    });
+
+    const result = processSessionStart('sess-maint', dir, path.join(dir, 'engram.db'));
+    expect(runMaintenance).toHaveBeenCalled();
+    const output = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(output.hookSpecificOutput.additionalContext).toContain('[engram] Maintenance: pruned 3 stale nodes');
+    expect(output.hookSpecificOutput.additionalContext).toContain('42ms');
+  });
+
+  it('does not surface maintenance summary when skipped', () => {
+    vi.mocked(runMaintenance).mockReturnValueOnce({
+      nodesPruned: 0, patternsCreated: 0, filesSuperseded: 0, durationMs: 1, skipped: true,
+    });
+
+    const result = processSessionStart('sess-skip', dir, path.join(dir, 'engram.db'));
+    expect(result).toEqual({});
+  });
+
+  it('session start still works when runMaintenance throws', () => {
+    vi.mocked(runMaintenance).mockImplementationOnce(() => { throw new Error('boom'); });
+
+    const result = processSessionStart('sess-err', dir, path.join(dir, 'engram.db'));
+    expect(result).toBeDefined();
   });
 });
 
