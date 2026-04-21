@@ -232,3 +232,46 @@ export type Annotation = {
   description: string;
   strength: number;
 };
+
+export type ContradictionVerdict = 'NO_CONTRADICTION' | 'INDIRECT_CONTRADICTION' | 'DIRECT_CONTRADICTION';
+
+export type ContradictionResult = {
+  verdict: ContradictionVerdict;
+  severity: 'low' | 'medium' | 'high';
+  explanation: string;
+  recommendation: string;
+};
+
+export type ContradictionConfig = {
+  client?: unknown;
+  model?: string;
+  strengthThreshold?: number;
+  maxFailures?: number;
+};
+
+export type ProgressVelocity = {
+  currentVelocity: number;
+  trend: 'increasing' | 'stable' | 'declining';
+  uniqueFilesWritten: number;
+  windowSize: number;
+};
+
+export type SearchToActRatio = {
+  ratio: number;
+  isConcerning: boolean;
+  reads: number;
+  writes: number;
+  progressFraction: number;
+  directorySpread: number;
+};
+
+export type ErrorRepetition = {
+  repeatedErrors: Array<{ file: string; errorType: string; count: number }>;
+  hasConcerningRepetitions: boolean;
+};
+
+export type MetricResults = {
+  progressVelocity: ProgressVelocity;
+  searchToActRatio: SearchToActRatio;
+  errorRepetition: ErrorRepetition;
+};
