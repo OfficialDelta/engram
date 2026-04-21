@@ -7,7 +7,7 @@ import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identi
 import { saveSessionState, type SessionState } from '../../core/session-state.js';
 import { buildContext } from '../../core/context-builder.js';
 import { spreadingActivation } from '../../core/retrieval.js';
-import { findUnconsolidatedSessions, spawnConsolidation } from '../../core/consolidation.js';
+import { findUnconsolidatedSessions, spawnConsolidation, findFailedConsolidations } from '../../core/consolidation.js';
 import type { EntryPoint } from '../../types.js';
 
 function logError(dataDir: string, message: string): void {
@@ -89,6 +89,15 @@ export function processSessionStart(
   saveSessionState(dataDir, sessionId, defaultState);
 
   let additionalContext = '';
+  try {
+    const failures = findFailedConsolidations(dataDir);
+    if (failures.length > 0) {
+      const lastError = failures.reduce((a, b) => (a.timestamp > b.timestamp ? a : b));
+      additionalContext += `[engram] Warning: ${failures.length} previous consolidation(s) failed. Recent error: ${lastError.error}\nRun "engram status" for details or delete .engram/episodes/*.failed.json to retry.\n\n`;
+    }
+  } catch {
+    // P004: failure marker reading must never throw
+  }
   try {
     const entryPoints = getRecentFileEntryPoints(dataDir);
     if (entryPoints.length > 0) {

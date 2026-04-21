@@ -50,6 +50,18 @@ vi.mock('../core/session-state.js', () => ({
   saveSessionState: vi.fn(),
 }));
 
+vi.mock('../db/migrations.js', () => ({
+  initializeSchema: vi.fn(() => ({ close: vi.fn() })),
+}));
+
+vi.mock('../core/context-builder.js', () => ({
+  buildContext: vi.fn(() => ''),
+}));
+
+vi.mock('../core/retrieval.js', () => ({
+  spreadingActivation: vi.fn(() => ({ tier1: [], tier2: [], tier3: [] })),
+}));
+
 describe('processStop API key validation', () => {
   const originalEnv = process.env.ANTHROPIC_API_KEY;
 
@@ -202,5 +214,43 @@ describe('findFailedConsolidations', () => {
     const results = mod.findFailedConsolidations(tmpDir);
     expect(results).toHaveLength(1);
     expect(results[0]!.sessionId).toBe('sess-good');
+  });
+});
+
+// --- processSessionStart failure surfacing ---
+
+describe('processSessionStart failure surfacing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('includes warning when failed consolidations exist', async () => {
+    const { findFailedConsolidations } = await import('../core/consolidation.js');
+    (findFailedConsolidations as ReturnType<typeof vi.fn>).mockReturnValue([
+      { sessionId: 'sess-a', error: 'Connection timeout', timestamp: '2026-01-01T00:00:00Z' },
+      { sessionId: 'sess-b', error: 'Rate limited', timestamp: '2026-01-02T00:00:00Z' },
+    ]);
+
+    const { processSessionStart } = await import('../adapters/claude-code/session-start.js');
+    const result = processSessionStart('new-sess', tmpDir, path.join(tmpDir, 'engram.db'));
+
+    const ctx = (result as { hookSpecificOutput?: { additionalContext?: string } })
+      .hookSpecificOutput?.additionalContext ?? '';
+    expect(ctx).toContain('2 previous consolidation(s) failed');
+    expect(ctx).toContain('Rate limited');
+    expect(ctx).toContain('engram status');
+    expect(ctx).toContain('.failed.json');
+  });
+
+  it('works normally when no failures exist', async () => {
+    const { findFailedConsolidations } = await import('../core/consolidation.js');
+    (findFailedConsolidations as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+    const { processSessionStart } = await import('../adapters/claude-code/session-start.js');
+    const result = processSessionStart('new-sess', tmpDir, path.join(tmpDir, 'engram.db'));
+
+    const ctx = (result as { hookSpecificOutput?: { additionalContext?: string } })
+      .hookSpecificOutput?.additionalContext ?? '';
+    expect(ctx).not.toContain('consolidation(s) failed');
   });
 });
