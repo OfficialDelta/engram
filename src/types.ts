@@ -141,3 +141,64 @@ export type EngramEvent =
   | ExpandingSearchEvent
   | RepeatedRevisionEvent
   | TurnCompleteEvent;
+
+export type WindowSummary = {
+  windowIndex: number;
+  eventRange: { start: number; end: number };
+  summary: string;
+  filesModified: string[];
+  decisionsIdentified: string[];
+  outcome: 'progress' | 'debugging' | 'blocked' | 'completed';
+};
+
+export type StructuredEpisode = {
+  goal: string;
+  approach: string;
+  outcome: 'success' | 'partial' | 'failure';
+  discoveries: Array<{ content: string; evidence: string; confidence: number }>;
+  decisions: Array<{ content: string; rationale: string; isImplicit: boolean }>;
+  errors: Array<{ description: string; rootCause: string; resolution: string }>;
+};
+
+export type GraphChangeRequest = {
+  nodesToCreate: Array<{
+    name: string;
+    nodeType: GraphNode['nodeType'];
+    description: string;
+    affectedFiles: string[];
+    causallyImportant: boolean;
+  }>;
+  nodesToUpdate: Array<{
+    existingNodeId: string;
+    updates: { description?: string; affectedFiles?: string[]; metadata?: Record<string, unknown> };
+  }>;
+  edgesToCreate: Array<{
+    sourceNodeName: string;
+    targetNodeName: string;
+    relationshipType: string;
+    weight: number;
+  }>;
+};
+
+export type MergeAction = {
+  action: 'merge' | 'create_child' | 'create_new';
+  existingNodeId?: string;
+  similarity?: number;
+};
+
+export type StrengthParams = {
+  sourceEpisodeCount: number;
+  sessionsWithoutReinforcement: number;
+  successfulEpisodes: number;
+  totalEpisodes: number;
+  causallyImportant: boolean;
+};
+
+export type ConsolidationConfig = {
+  client?: unknown;
+  pass1Model?: string;
+  pass2Model?: string;
+  windowSize?: number;
+  windowOverlap?: number;
+  embeddingConfig?: { provider?: string; apiKey?: string };
+};
