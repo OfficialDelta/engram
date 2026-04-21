@@ -50,6 +50,9 @@ export function onToolCall(session: AdapterSession, toolCall: RawToolCall): Tool
   if (!event) {
     return { context: '', events: [] };
   }
+  if (toolCall.tags) {
+    event.tags = toolCall.tags;
+  }
 
   appendEvent(sessionId, event, dataDir);
 

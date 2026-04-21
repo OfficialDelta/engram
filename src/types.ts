@@ -51,12 +51,14 @@ export type RawToolCall = {
   tool_name: string;
   tool_input: Record<string, unknown>;
   session_id: string;
+  tags?: Record<string, string>;
 };
 
 type BaseEvent = {
   type: string;
   sessionId: string;
   timestamp: string;
+  tags?: Record<string, string>;
 };
 
 export type FileReadEvent = BaseEvent & {
