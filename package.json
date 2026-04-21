@@ -2,9 +2,15 @@
   "name": "engram",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "bin": {
-    "engram": "./dist/cli/install.js"
+    "engram": "./dist/cli/index.js"
   },
   "scripts": {
     "test": "vitest run"

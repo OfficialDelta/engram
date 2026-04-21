@@ -275,3 +275,25 @@ export type MetricResults = {
   searchToActRatio: SearchToActRatio;
   errorRepetition: ErrorRepetition;
 };
+
+// Generic adapter API types
+
+export type AdapterConfig = {
+  cwd?: string;
+  dataDir?: string;
+  dbPath?: string;
+  sessionId?: string;
+};
+
+export type AdapterSession = {
+  sessionId: string;
+  dataDir: string;
+  dbPath: string;
+  db: import('better-sqlite3').Database;
+  close(): void;
+};
+
+export type ToolCallResult = {
+  context: string;
+  events: EngramEvent[];
+};
