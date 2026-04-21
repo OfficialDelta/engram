@@ -54,8 +54,21 @@ interface HookEntry {
   timeout?: number;
 }
 
+interface MatcherBlock {
+  matcher: string;
+  hooks: HookEntry[];
+}
+
 interface HooksMap {
-  [event: string]: { hooks?: HookEntry[] } | undefined;
+  [event: string]: MatcherBlock[] | undefined;
+}
+
+function normalizeEvent(raw: unknown): MatcherBlock[] {
+  if (Array.isArray(raw)) return raw as MatcherBlock[];
+  if (raw && typeof raw === 'object' && 'hooks' in raw) {
+    return [{ matcher: '', hooks: (raw as { hooks: HookEntry[] }).hooks }];
+  }
+  return [];
 }
 
 function mergeHooks(settings: Record<string, unknown>, hookDir: string): void {
@@ -63,20 +76,22 @@ function mergeHooks(settings: Record<string, unknown>, hookDir: string): void {
   settings['hooks'] = hooks;
 
   for (const [event, config] of Object.entries(HOOK_EVENTS)) {
-    const eventBlock = hooks[event] ?? { hooks: [] };
-    hooks[event] = eventBlock;
-    const hookList = eventBlock.hooks ?? [];
-    eventBlock.hooks = hookList;
+    const matchers = normalizeEvent(hooks[event]);
+    hooks[event] = matchers;
 
-    const alreadyInstalled = hookList.some(
+    const allHookEntries = matchers.flatMap((m) => m.hooks ?? []);
+    const alreadyInstalled = allHookEntries.some(
       (h) => typeof h.command === 'string' && h.command.includes('engram'),
     );
     if (alreadyInstalled) continue;
 
-    hookList.push({
-      type: 'command',
-      command: `node ${join(hookDir, `${config.handler}.js`)}`,
-      timeout: config.timeout,
+    matchers.push({
+      matcher: '',
+      hooks: [{
+        type: 'command',
+        command: `node ${join(hookDir, `${config.handler}.js`)}`,
+        timeout: config.timeout,
+      }],
     });
   }
 }
@@ -86,9 +101,9 @@ function validateInstall(settingsPath: string): string[] {
   const hooks = settings['hooks'] as HooksMap | undefined;
   const missing: string[] = [];
   for (const event of Object.keys(HOOK_EVENTS)) {
-    const eventBlock = hooks?.[event];
-    const hookList = eventBlock?.hooks ?? [];
-    const found = hookList.some(
+    const matchers = hooks?.[event] ?? [];
+    const allHookEntries = matchers.flatMap((m) => m.hooks ?? []);
+    const found = allHookEntries.some(
       (h) => typeof h.command === 'string' && h.command.includes('engram'),
     );
     if (!found) missing.push(event);

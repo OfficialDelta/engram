@@ -64,14 +64,17 @@ describe('install CLI', () => {
     expect(settings.hooks).toBeDefined();
   });
 
-  it('all 4 hook events present in resulting settings.json', () => {
+  it('all 4 hook events present in resulting settings.json as matcher arrays', () => {
     const claudeDir = path.join(tmpDir, '.claude');
     runInstall({ claudeConfigDir: claudeDir, cwd: tmpDir, hookDir: hookDir() });
 
     const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf-8'));
     for (const event of ['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop']) {
-      expect(settings.hooks[event]).toBeDefined();
-      expect(settings.hooks[event].hooks.length).toBeGreaterThan(0);
+      expect(Array.isArray(settings.hooks[event])).toBe(true);
+      expect(settings.hooks[event].length).toBeGreaterThan(0);
+      expect(settings.hooks[event][0]).toHaveProperty('matcher');
+      expect(settings.hooks[event][0]).toHaveProperty('hooks');
+      expect(settings.hooks[event][0].hooks.length).toBeGreaterThan(0);
     }
   });
 
@@ -82,7 +85,10 @@ describe('install CLI', () => {
 
     const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf-8'));
     for (const event of ['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop']) {
-      const entry = settings.hooks[event].hooks.find(
+      const allEntries = settings.hooks[event].flatMap(
+        (m: { hooks: { command: string }[] }) => m.hooks,
+      );
+      const entry = allEntries.find(
         (h: { command: string }) => h.command.includes('engram'),
       );
       expect(entry).toBeDefined();
@@ -108,7 +114,10 @@ describe('install CLI', () => {
 
     const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf-8'));
     for (const event of ['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop']) {
-      const engramHooks = settings.hooks[event].hooks.filter(
+      const allEntries = settings.hooks[event].flatMap(
+        (m: { hooks: { command: string }[] }) => m.hooks,
+      );
+      const engramHooks = allEntries.filter(
         (h: { command: string }) => h.command.includes('engram'),
       );
       expect(engramHooks).toHaveLength(1);

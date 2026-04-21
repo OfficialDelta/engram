@@ -28,12 +28,12 @@ function makeSettings(hooks: Record<string, unknown>, extra?: Record<string, unk
   return JSON.stringify({ ...extra, hooks }, null, 2);
 }
 
-function engramHook(handler: string): { type: string; command: string; timeout: number } {
-  return { type: 'command', command: `node /path/to/engram/${handler}.js`, timeout: 10 };
+function engramMatcher(handler: string): { matcher: string; hooks: { type: string; command: string; timeout: number }[] } {
+  return { matcher: '', hooks: [{ type: 'command', command: `node /path/to/engram/${handler}.js`, timeout: 10 }] };
 }
 
-function otherHook(name: string): { type: string; command: string } {
-  return { type: 'command', command: `node /path/to/${name}/handler.js` };
+function otherMatcher(name: string): { matcher: string; hooks: { type: string; command: string }[] } {
+  return { matcher: '', hooks: [{ type: 'command', command: `node /path/to/${name}/handler.js` }] };
 }
 
 describe('uninstall CLI', () => {
@@ -44,10 +44,10 @@ describe('uninstall CLI', () => {
       path.join(claudeDir, 'settings.json'),
       makeSettings(
         {
-          PostToolUse: { hooks: [engramHook('post-tool-use')] },
-          SessionStart: { hooks: [engramHook('session-start')] },
-          UserPromptSubmit: { hooks: [engramHook('user-prompt-submit')] },
-          Stop: { hooks: [engramHook('stop')] },
+          PostToolUse: [engramMatcher('post-tool-use')],
+          SessionStart: [engramMatcher('session-start')],
+          UserPromptSubmit: [engramMatcher('user-prompt-submit')],
+          Stop: [engramMatcher('stop')],
         },
         { theme: 'dark', custom: { nested: true } },
       ),
@@ -68,8 +68,8 @@ describe('uninstall CLI', () => {
     fs.writeFileSync(
       path.join(claudeDir, 'settings.json'),
       makeSettings({
-        PostToolUse: { hooks: [engramHook('post-tool-use'), otherHook('another-tool')] },
-        SessionStart: { hooks: [engramHook('session-start')] },
+        PostToolUse: [engramMatcher('post-tool-use'), otherMatcher('another-tool')],
+        SessionStart: [engramMatcher('session-start')],
       }),
     );
 
@@ -77,8 +77,8 @@ describe('uninstall CLI', () => {
 
     expect(result.hooksRemoved).toBe(2);
     const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf-8'));
-    expect(settings.hooks.PostToolUse.hooks).toHaveLength(1);
-    expect(settings.hooks.PostToolUse.hooks[0].command).toContain('another-tool');
+    expect(settings.hooks.PostToolUse).toHaveLength(1);
+    expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain('another-tool');
     expect(settings.hooks.SessionStart).toBeUndefined();
   });
 
@@ -87,7 +87,7 @@ describe('uninstall CLI', () => {
     fs.mkdirSync(claudeDir, { recursive: true });
     fs.writeFileSync(
       path.join(claudeDir, 'settings.json'),
-      makeSettings({ PostToolUse: { hooks: [otherHook('some-tool')] } }),
+      makeSettings({ PostToolUse: [otherMatcher('some-tool')] }),
     );
 
     const result = runUninstall({ claudeConfigDir: claudeDir, cwd: tmpDir });

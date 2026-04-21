@@ -18,8 +18,21 @@ interface HookEntry {
   timeout?: number;
 }
 
+interface MatcherBlock {
+  matcher: string;
+  hooks: HookEntry[];
+}
+
 interface HooksMap {
-  [event: string]: { hooks?: HookEntry[] } | undefined;
+  [event: string]: MatcherBlock[] | undefined;
+}
+
+function normalizeEvent(raw: unknown): MatcherBlock[] {
+  if (Array.isArray(raw)) return raw as MatcherBlock[];
+  if (raw && typeof raw === 'object' && 'hooks' in raw) {
+    return [{ matcher: '', hooks: (raw as { hooks: HookEntry[] }).hooks }];
+  }
+  return [];
 }
 
 function readSettings(settingsPath: string): Record<string, unknown> {
@@ -41,16 +54,21 @@ export function removeHooks(settings: Record<string, unknown>): { removed: numbe
   let removed = 0;
 
   for (const event of Object.keys(HOOK_EVENTS)) {
-    const eventBlock = hooks[event];
-    if (!eventBlock?.hooks) continue;
+    const raw = hooks[event];
+    if (!raw) continue;
+    const matchers = normalizeEvent(raw);
+    hooks[event] = matchers;
 
-    const before = eventBlock.hooks.length;
-    eventBlock.hooks = eventBlock.hooks.filter(
-      (h) => !(typeof h.command === 'string' && h.command.includes('engram')),
-    );
-    removed += before - eventBlock.hooks.length;
+    for (const matcher of matchers) {
+      const before = matcher.hooks.length;
+      matcher.hooks = matcher.hooks.filter(
+        (h) => !(typeof h.command === 'string' && h.command.includes('engram')),
+      );
+      removed += before - matcher.hooks.length;
+    }
 
-    if (eventBlock.hooks.length === 0) {
+    hooks[event] = matchers.filter((m) => m.hooks.length > 0);
+    if (hooks[event]!.length === 0) {
       delete hooks[event];
     }
   }
