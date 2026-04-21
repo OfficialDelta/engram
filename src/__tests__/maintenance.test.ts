@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { describe, it, expect, vi } from 'vitest';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import { initializeSchema } from '../db/migrations.js';
 import { createNode, getNode, createEdge, getEdge } from '../db/graph.js';
-import { decaySweep, patternScan, runMaintenance } from '../core/maintenance.js';
+import { decaySweep, patternScan, supersessionCheck, runMaintenance } from '../core/maintenance.js';
 import type { CreateNodeInput, CreateEdgeInput } from '../types.js';
 
 function freshDb() {
@@ -111,7 +111,8 @@ describe('runMaintenance', () => {
       expect(result.skipped).toBe(false);
       expect(result.nodesPruned).toBe(1);
       expect(result.patternsCreated).toBe(0);
-      expect(result.filesSuperseded).toBe(0);
+      // The surviving node references 'src/main.ts' which doesn't exist in test env
+      expect(result.filesSuperseded).toBe(1);
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
 
       const row = db.prepare("SELECT value FROM metadata WHERE key = 'last_maintenance_run'").get() as { value: string };
@@ -281,5 +282,60 @@ describe('patternScan', () => {
     const result = patternScan(db);
 
     expect(result.patternsCreated).toBe(0);
+  });
+});
+
+describe('supersessionCheck', () => {
+  it('sets strength to 0 when all referenced files are missing', () => {
+    const db = freshDb();
+    const node = createNode(db, makeNodeInput({
+      name: 'stale-node',
+      affectedFiles: ['/nonexistent/path/a.ts', '/nonexistent/path/b.ts'],
+      strength: 0.8,
+    }));
+
+    const result = supersessionCheck(db);
+
+    expect(result.filesSuperseded).toBe(1);
+    const updated = getNode(db, node.id);
+    expect(updated).toBeDefined();
+    expect(updated!.strength).toBe(0);
+  });
+
+  it('leaves node unchanged when some files still exist', () => {
+    const db = freshDb();
+    const tmpDir = mkdtempSync(join(tmpdir(), 'engram-test-'));
+    const existingFile = join(tmpDir, 'real.ts');
+    writeFileSync(existingFile, 'export const x = 1;');
+    try {
+      const node = createNode(db, makeNodeInput({
+        name: 'partial-node',
+        affectedFiles: [existingFile, '/nonexistent/path/gone.ts'],
+        strength: 0.8,
+      }));
+
+      const result = supersessionCheck(db);
+
+      expect(result.filesSuperseded).toBe(0);
+      const updated = getNode(db, node.id);
+      expect(updated!.strength).toBe(0.8);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves node unchanged when affected_files is empty array', () => {
+    const db = freshDb();
+    const node = createNode(db, makeNodeInput({
+      name: 'no-files-node',
+      affectedFiles: [],
+      strength: 0.8,
+    }));
+
+    const result = supersessionCheck(db);
+
+    expect(result.filesSuperseded).toBe(0);
+    const updated = getNode(db, node.id);
+    expect(updated!.strength).toBe(0.8);
   });
 });

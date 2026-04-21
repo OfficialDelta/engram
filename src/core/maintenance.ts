@@ -1,5 +1,5 @@
 import type BetterSqlite3 from 'better-sqlite3';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createNode, deleteNode, updateNode } from '../db/graph.js';
 
@@ -46,26 +46,27 @@ export function runMaintenance(
     const result = db.transaction(() => {
       const sweep = decaySweep(db, config);
       const patterns = patternScan(db);
+      const supersession = supersessionCheck(db);
 
       const maintenanceRecord = {
         timestamp: new Date().toISOString(),
         nodesPruned: sweep.nodesPruned,
         nodesDecayed: sweep.nodesDecayed,
         patternsCreated: patterns.patternsCreated,
-        filesSuperseded: 0,
+        filesSuperseded: supersession.filesSuperseded,
       };
 
       db.prepare(
         "INSERT OR REPLACE INTO metadata (key, value) VALUES ('last_maintenance_run', ?)",
       ).run(JSON.stringify(maintenanceRecord));
 
-      return { ...sweep, patternsCreated: patterns.patternsCreated };
+      return { ...sweep, patternsCreated: patterns.patternsCreated, filesSuperseded: supersession.filesSuperseded };
     })();
 
     return {
       nodesPruned: result.nodesPruned,
       patternsCreated: result.patternsCreated,
-      filesSuperseded: 0,
+      filesSuperseded: result.filesSuperseded,
       durationMs: Date.now() - start,
       skipped: false,
     };
@@ -143,4 +144,29 @@ export function patternScan(db: Database): PatternScanResult {
   }
 
   return { patternsCreated };
+}
+
+export interface SupersessionCheckResult {
+  filesSuperseded: number;
+}
+
+export function supersessionCheck(db: Database): SupersessionCheckResult {
+  const rows = db.prepare(
+    "SELECT id, affected_files FROM nodes WHERE affected_files != '[]'",
+  ).all() as Array<{ id: string; affected_files: string }>;
+
+  let filesSuperseded = 0;
+
+  for (const row of rows) {
+    const files = JSON.parse(row.affected_files) as string[];
+    if (files.length === 0) continue;
+
+    const allMissing = files.every((f) => !existsSync(f));
+    if (allMissing) {
+      updateNode(db, row.id, { strength: 0 });
+      filesSuperseded++;
+    }
+  }
+
+  return { filesSuperseded };
 }
