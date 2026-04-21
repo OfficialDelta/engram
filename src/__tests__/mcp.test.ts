@@ -116,6 +116,87 @@ describe('handleQueryKnowledge', () => {
   });
 });
 
+describe('save_decision integration', () => {
+  let tmpDir: string;
+  let db: BetterSqlite3.Database;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpDir = makeTmpDir();
+    ensureDataDirs(tmpDir);
+    const dbPath = path.join(tmpDir, 'test-mcp.db');
+    db = initializeSchema(dbPath);
+  });
+
+  afterEach(() => {
+    db.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('saved decision is queryable via query_knowledge', async () => {
+    const result = await handleSaveDecision(db, {
+      decision: 'Use SQLite for storage',
+      rationale: 'Lightweight, zero-config, embedded',
+      affected_files: ['src/db/graph.ts'],
+      alternatives_considered: ['PostgreSQL', 'MongoDB'],
+    });
+
+    expect(result).not.toHaveProperty('isError');
+    const parsed = JSON.parse(result.content[0]!.text);
+    expect(parsed.action).toBe('created');
+    expect(parsed.nodeId).toBeDefined();
+
+    const row = db.prepare('SELECT * FROM nodes WHERE node_type = ?').get('decision') as { id: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.id).toBe(parsed.nodeId);
+
+    // Spreading activation excludes entry nodes from results and returns neighbors.
+    // Add a related concept node with an edge so the decision's neighborhood is non-empty.
+    const neighbor = createNode(db, {
+      name: 'EmbeddedDatabasePattern',
+      nodeType: 'concept',
+      description: 'Pattern of using embedded databases for local-first apps',
+      affectedFiles: ['src/db/graph.ts'],
+      strength: 1.0,
+      metadata: {},
+    });
+    createEdge(db, {
+      sourceNodeId: parsed.nodeId,
+      targetNodeId: neighbor.id,
+      relationshipType: 'supports',
+      weight: 1.0,
+      metadata: {},
+    });
+
+    const queryResult = handleQueryKnowledge(db, 'What about `Use SQLite for storage`?');
+    expect(queryResult.content).toHaveLength(1);
+    expect(queryResult.content[0]!.text).not.toBe('No knowledge stored yet.');
+    expect(queryResult.content[0]!.text).toContain('EmbeddedDatabasePattern');
+  });
+
+  it('saved decision node has correct metadata', async () => {
+    const result = await handleSaveDecision(db, {
+      decision: 'Use REST over GraphQL',
+      rationale: 'Team familiarity and simpler tooling',
+      affected_files: ['src/api/routes.ts'],
+      alternatives_considered: ['GraphQL', 'gRPC'],
+    });
+
+    expect(result).not.toHaveProperty('isError');
+    const parsed = JSON.parse(result.content[0]!.text);
+
+    const node = getNode(db, parsed.nodeId);
+    expect(node).toBeDefined();
+    expect(node!.nodeType).toBe('decision');
+
+    const meta = node!.metadata as Record<string, unknown>;
+    expect(meta.source).toBe('explicit');
+    expect(meta.alternatives).toEqual(['GraphQL', 'gRPC']);
+    expect(node!.strength).toBeGreaterThan(0);
+    expect(node!.affectedFiles).toContain('src/api/routes.ts');
+  });
+});
+
 describe('handleSaveDecision', () => {
   let tmpDir: string;
   let db: BetterSqlite3.Database;
