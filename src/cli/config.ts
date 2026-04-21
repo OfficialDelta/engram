@@ -31,6 +31,7 @@ const EMBEDDING_PROVIDERS = [
   'voyage-3-lite',
   'openai',
   'text-embedding-3-small',
+  'local',
   'ollama',
 ];
 
