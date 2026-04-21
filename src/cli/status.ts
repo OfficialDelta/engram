@@ -1,0 +1,202 @@
+#!/usr/bin/env node
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
+import { getDataDir, getDbPath } from '../core/project-identity.js';
+import { Database } from '../db/migrations.js';
+
+const HOOK_EVENT_NAMES = ['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop'] as const;
+
+interface HookEntry {
+  type: string;
+  command: string;
+  timeout?: number;
+}
+
+interface HooksMap {
+  [event: string]: { hooks?: HookEntry[] } | undefined;
+}
+
+export interface StatusOptions {
+  claudeConfigDir: string;
+  cwd: string;
+}
+
+export interface StatusResult {
+  dataDir: string;
+  dataDirExists: boolean;
+  dbPath: string;
+  dbExists: boolean;
+  nodes: number | null;
+  edges: number | null;
+  episodes: number | null;
+  lastConsolidation: string | null;
+  hooksRegistered: string[];
+  hooksMissing: string[];
+  dbError?: string;
+}
+
+interface DbStats {
+  nodes: number;
+  edges: number;
+  episodes: number;
+  lastConsolidation: string | null;
+}
+
+function getDbStats(dbPath: string): DbStats | { error: string } {
+  if (!existsSync(dbPath)) return { error: 'DB file does not exist' };
+  try {
+    const db = new Database(dbPath, { readonly: true });
+    const nodes = (db.prepare('SELECT COUNT(*) AS count FROM nodes').get() as { count: number }).count;
+    const edges = (db.prepare('SELECT COUNT(*) AS count FROM edges').get() as { count: number }).count;
+    const episodes = (db.prepare('SELECT COUNT(*) AS count FROM episodes').get() as { count: number }).count;
+    const lastRow = db.prepare('SELECT MAX(timestamp) AS last FROM episodes').get() as { last: string | null };
+    db.close();
+    return { nodes, edges, episodes, lastConsolidation: lastRow.last };
+  } catch (err) {
+    return { error: String(err) };
+  }
+}
+
+function checkHooksRegistered(settingsPath: string): { registered: string[]; missing: string[] } {
+  if (!existsSync(settingsPath)) {
+    return { registered: [], missing: [...HOOK_EVENT_NAMES] };
+  }
+  let settings: Record<string, unknown>;
+  try {
+    settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+  } catch {
+    return { registered: [], missing: [...HOOK_EVENT_NAMES] };
+  }
+  const hooks = settings['hooks'] as HooksMap | undefined;
+  const registered: string[] = [];
+  const missing: string[] = [];
+  for (const event of HOOK_EVENT_NAMES) {
+    const eventBlock = hooks?.[event];
+    const hookList = eventBlock?.hooks ?? [];
+    const found = hookList.some(
+      (h) => typeof h.command === 'string' && h.command.includes('engram'),
+    );
+    if (found) {
+      registered.push(event);
+    } else {
+      missing.push(event);
+    }
+  }
+  return { registered, missing };
+}
+
+export function runStatus(options: StatusOptions): StatusResult {
+  const dataDir = getDataDir(options.cwd);
+  const dbPath = getDbPath(options.cwd);
+  const dataDirExists = existsSync(dataDir);
+  const dbExists = existsSync(dbPath);
+
+  let nodes: number | null = null;
+  let edges: number | null = null;
+  let episodes: number | null = null;
+  let lastConsolidation: string | null = null;
+  let dbError: string | undefined;
+
+  if (dbExists) {
+    const stats = getDbStats(dbPath);
+    if ('error' in stats) {
+      dbError = stats.error;
+    } else {
+      nodes = stats.nodes;
+      edges = stats.edges;
+      episodes = stats.episodes;
+      lastConsolidation = stats.lastConsolidation;
+    }
+  }
+
+  const settingsPath = join(options.claudeConfigDir, 'settings.json');
+  const { registered, missing } = checkHooksRegistered(settingsPath);
+
+  const base = {
+    dataDir,
+    dataDirExists,
+    dbPath,
+    dbExists,
+    nodes,
+    edges,
+    episodes,
+    lastConsolidation,
+    hooksRegistered: registered,
+    hooksMissing: missing,
+  };
+  if (dbError !== undefined) {
+    return { ...base, dbError };
+  }
+  return base;
+}
+
+export function formatStatus(result: StatusResult): string {
+  const lines: string[] = ['engram status', ''];
+
+  const dirTag = result.dataDirExists ? 'exists' : 'not found';
+  lines.push(`  Data directory:  ${result.dataDir}  [${dirTag}]`);
+
+  let dbTag: string;
+  if (result.dbError) {
+    dbTag = `error: ${result.dbError}`;
+  } else if (result.dbExists) {
+    dbTag = 'initialized';
+  } else {
+    dbTag = 'not initialized — run engram install';
+  }
+  lines.push(`  Database:        ${result.dbPath}  [${dbTag}]`);
+
+  lines.push('');
+  lines.push('  Graph:');
+  if (result.dbExists && !result.dbError) {
+    lines.push(`    Nodes:              ${result.nodes}`);
+    lines.push(`    Edges:              ${result.edges}`);
+    lines.push(`    Episodes:           ${result.episodes}`);
+    lines.push(`    Last consolidation: ${result.lastConsolidation ?? 'none'}`);
+  } else {
+    lines.push('    (no data)');
+  }
+
+  const total = HOOK_EVENT_NAMES.length;
+  const regCount = result.hooksRegistered.length;
+  lines.push('');
+  lines.push(`  Hooks (${regCount}/${total} registered):`);
+  for (const event of HOOK_EVENT_NAMES) {
+    if (result.hooksRegistered.includes(event)) {
+      lines.push(`    ✓ ${event}`);
+    } else {
+      lines.push(`    ✗ ${event}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function printUsage(): void {
+  console.log(`Usage: engram status
+
+Shows engram graph stats, hook registration, and data directory info.
+
+Options:
+  --help  Show this help message`);
+}
+
+function main(): void {
+  const args = process.argv.slice(2);
+  if (args.includes('--help')) {
+    printUsage();
+    process.exit(0);
+  }
+
+  const result = runStatus({
+    claudeConfigDir: join(homedir(), '.claude'),
+    cwd: process.cwd(),
+  });
+  console.log(formatStatus(result));
+}
+
+if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  main();
+}

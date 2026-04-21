@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { runInstall } from './install.js';
 import { runUninstall } from './uninstall.js';
+import { runStatus, formatStatus } from './status.js';
 
 function printUsage(): void {
   console.log(`Usage: engram <command>
@@ -11,7 +12,7 @@ function printUsage(): void {
 Commands:
   install     Register engram hooks and initialize project data
   uninstall   Remove engram hooks from Claude Code settings
-  status      (not yet implemented)
+  status      Show engram graph stats, hook registration, and data info
   mcp         Start MCP server exposing engram tools
 
 Run 'engram <command> --help' for more information on a command.`);
@@ -70,10 +71,14 @@ async function main(): Promise<void> {
       }
       break;
     }
-    case 'status':
-      console.log('engram status: not yet implemented');
-      process.exit(1);
+    case 'status': {
+      const result = runStatus({
+        claudeConfigDir: resolve(homedir(), '.claude'),
+        cwd: process.cwd(),
+      });
+      console.log(formatStatus(result));
       break;
+    }
     default:
       if (subcommand && subcommand !== '--help' && subcommand !== '-h') {
         console.error(`Unknown command: ${subcommand}\n`);
