@@ -3,13 +3,14 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { runInstall } from './install.js';
+import { runUninstall } from './uninstall.js';
 
 function printUsage(): void {
   console.log(`Usage: engram <command>
 
 Commands:
   install     Register engram hooks and initialize project data
-  uninstall   (not yet implemented)
+  uninstall   Remove engram hooks from Claude Code settings
   status      (not yet implemented)
   mcp         Start MCP server exposing engram tools
 
@@ -47,9 +48,30 @@ async function main(): Promise<void> {
       await runMcp(process.cwd());
       break;
     }
-    case 'uninstall':
+    case 'uninstall': {
+      try {
+        const purge = process.argv.slice(3).includes('--purge');
+        const result = runUninstall({
+          claudeConfigDir: resolve(homedir(), '.claude'),
+          cwd: process.cwd(),
+          purge,
+        });
+        if (result.hooksRemoved > 0) {
+          console.log(`  ✓ Removed ${result.hooksRemoved} hook(s) from ${result.settingsPath}`);
+        } else {
+          console.log('  No engram hooks found in settings.');
+        }
+        if (result.dataDirRemoved) {
+          console.log(`  ✓ Removed data directory ${result.dataDir}`);
+        }
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+      }
+      break;
+    }
     case 'status':
-      console.log(`engram ${subcommand}: not yet implemented`);
+      console.log('engram status: not yet implemented');
       process.exit(1);
       break;
     default:
