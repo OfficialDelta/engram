@@ -11,12 +11,12 @@ Commands:
   install     Register engram hooks and initialize project data
   uninstall   (not yet implemented)
   status      (not yet implemented)
-  mcp         (not yet implemented)
+  mcp         Start MCP server exposing engram tools
 
 Run 'engram <command> --help' for more information on a command.`);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const subcommand = process.argv[2];
 
   switch (subcommand) {
@@ -42,9 +42,13 @@ function main(): void {
       }
       break;
     }
+    case 'mcp': {
+      const { runMcp } = await import('./mcp.js');
+      await runMcp(process.cwd());
+      break;
+    }
     case 'uninstall':
     case 'status':
-    case 'mcp':
       console.log(`engram ${subcommand}: not yet implemented`);
       process.exit(1);
       break;
@@ -59,5 +63,8 @@ function main(): void {
 }
 
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
-  main();
+  main().catch((err) => {
+    console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  });
 }
