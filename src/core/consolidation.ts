@@ -109,7 +109,16 @@ export async function pass2Extract(
     messages: [
       {
         role: 'user',
-        content: `Analyze these session window summaries and extract a structured episode with graph changes.\n\n${summaryText}`,
+        content: `Analyze these session window summaries and extract a structured episode with graph changes.
+
+Decision extraction guidance:
+- Identify both EXPLICIT decisions (agent stated a choice with rationale) and IMPLICIT decisions (agent chose between alternatives without stating the choice).
+- For explicit decisions: set isImplicit=false, include the stated rationale verbatim, set causallyImportant=true on the corresponding graph node.
+- For implicit decisions: set isImplicit=true, infer the rationale from context. Only flag as a decision when alternatives were clearly available — routine code changes are not decisions. Set causallyImportant=false.
+- Each decision node should have nodeType='decision' and a descriptive name summarizing the choice made.
+- Include affected file paths in affectedFiles for every decision node.
+
+${summaryText}`,
       },
     ],
     tools: [
