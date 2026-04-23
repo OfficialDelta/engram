@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -150,6 +150,7 @@ function main(): void {
   }
 }
 
-if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+const argv1Real = (() => { try { return realpathSync(resolve(process.argv[1] ?? '')); } catch { return resolve(process.argv[1] ?? ''); } })();
+if (argv1Real === fileURLToPath(import.meta.url)) {
   main();
 }

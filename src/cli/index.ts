@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { runInstall } from './install.js';
@@ -128,7 +129,8 @@ Options:
   }
 }
 
-if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+const argv1Real = (() => { try { return realpathSync(resolve(process.argv[1] ?? '')); } catch { return resolve(process.argv[1] ?? ''); } })();
+if (argv1Real === fileURLToPath(import.meta.url)) {
   main().catch((err) => {
     console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);

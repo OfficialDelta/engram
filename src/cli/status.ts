@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -16,8 +16,13 @@ interface HookEntry {
   timeout?: number;
 }
 
+interface MatcherBlock {
+  matcher: string;
+  hooks: HookEntry[];
+}
+
 interface HooksMap {
-  [event: string]: { hooks?: HookEntry[] } | undefined;
+  [event: string]: MatcherBlock[] | undefined;
 }
 
 export interface StatusOptions {
@@ -79,9 +84,10 @@ function checkHooksRegistered(settingsPath: string): { registered: string[]; mis
   const registered: string[] = [];
   const missing: string[] = [];
   for (const event of HOOK_EVENT_NAMES) {
-    const eventBlock = hooks?.[event];
-    const hookList = eventBlock?.hooks ?? [];
-    const found = hookList.some(
+    const raw = hooks?.[event];
+    const matchers: MatcherBlock[] = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && 'hooks' in raw) ? [{ matcher: '', hooks: (raw as { hooks: HookEntry[] }).hooks }] : [];
+    const allHookEntries = matchers.flatMap((m) => m.hooks ?? []);
+    const found = allHookEntries.some(
       (h) => typeof h.command === 'string' && h.command.includes('engram'),
     );
     if (found) {
@@ -247,6 +253,7 @@ function main(): void {
   console.log(formatStatus(result));
 }
 
-if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+const argv1Real = (() => { try { return realpathSync(resolve(process.argv[1] ?? '')); } catch { return resolve(process.argv[1] ?? ''); } })();
+if (argv1Real === fileURLToPath(import.meta.url)) {
   main();
 }
