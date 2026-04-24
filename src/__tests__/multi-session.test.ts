@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { GraphChangeRequest } from '../types.js';
+import type { GraphChangeRequest, TieredResults, ContradictionResult, Annotation } from '../types.js';
+import { buildContext } from '../core/context-builder.js';
 import { applyGraphChanges } from '../core/consolidation.js';
 import { decaySweep, supersessionCheck } from '../core/maintenance.js';
 import { initializeSchema } from '../db/migrations.js';
@@ -192,6 +193,102 @@ describe('Multi-session test harness', () => {
       const afterSupersession = getNodesByName(db, 'superseded-node');
       expect(afterSupersession.length).toBe(1);
       expect(afterSupersession[0]!.strength).toBe(0);
+    });
+  });
+
+  describe('5. Duplicate Prevention', () => {
+    it('does not create duplicate nodes when the same data is applied in separate sessions', async () => {
+      const changes: GraphChangeRequest = {
+        nodesToCreate: [
+          { name: 'dup-test', nodeType: 'pattern', description: 'Test duplicate prevention', affectedFiles: [], causallyImportant: false },
+        ],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      };
+
+      await simulateSession(db, 'sess-dup-1', changes);
+      await simulateSession(db, 'sess-dup-2', changes);
+
+      const nodes = getNodesByName(db, 'dup-test');
+      expect(nodes.length).toBe(1);
+
+      const meta = nodes[0]!.metadata as { sourceEpisodes?: string[] };
+      expect(meta.sourceEpisodes).toBeDefined();
+      expect(meta.sourceEpisodes!.length).toBe(2);
+    });
+  });
+
+  describe('6. Description Stability', () => {
+    it('does not concatenate descriptions when merging nodes with identical text', async () => {
+      const nodeSpec = {
+        name: 'stable-desc',
+        nodeType: 'pattern' as const,
+        description: 'Handles user authentication via JWT tokens',
+        affectedFiles: ['src/auth.ts'],
+        causallyImportant: false,
+      };
+
+      await simulateSession(db, 'sess-stable-1', {
+        nodesToCreate: [nodeSpec],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      });
+
+      await simulateSession(db, 'sess-stable-2', {
+        nodesToCreate: [nodeSpec],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      });
+
+      const nodes = getNodesByName(db, 'stable-desc');
+      expect(nodes.length).toBe(1);
+      expect(nodes[0]!.description).toBe('Handles user authentication via JWT tokens');
+      expect(nodes[0]!.description).not.toContain('; ');
+    });
+  });
+
+  describe('7. Cross-cutting Decision Dedup', () => {
+    it('renders cross-cutting decisions in Project-wide decisions section, not in regular Decisions', async () => {
+      await simulateSession(db, 'sess-cross-1', {
+        nodesToCreate: [
+          { name: 'cross-cutting-arch', nodeType: 'decision', description: 'Use microservices architecture for all services', affectedFiles: ['src/a.ts', 'src/b.ts', 'src/c.ts'], causallyImportant: false },
+          { name: 'local-auth-decision', nodeType: 'decision', description: 'Use bcrypt for password hashing', affectedFiles: ['src/auth.ts'], causallyImportant: false },
+          { name: 'some-pattern', nodeType: 'pattern', description: 'Singleton pattern for DB connection', affectedFiles: ['src/db.ts', 'src/app.ts', 'src/server.ts'], causallyImportant: false },
+        ],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      });
+
+      const crossCuttingNodes = getNodesByName(db, 'cross-cutting-arch');
+      const localNodes = getNodesByName(db, 'local-auth-decision');
+      const patternNodes = getNodesByName(db, 'some-pattern');
+
+      const tieredResults: TieredResults = {
+        high: [
+          { node: crossCuttingNodes[0]!, activation: 1.0 },
+          { node: localNodes[0]!, activation: 0.8 },
+          { node: patternNodes[0]!, activation: 0.7 },
+        ],
+        medium: [],
+      };
+
+      const output = buildContext([] as ContradictionResult[], [] as Annotation[], tieredResults);
+
+      expect(output).toContain('## Project-wide decisions');
+      expect(output).toContain('microservices');
+
+      const sections = output.split('## ');
+      const projectWideSection = sections.find(s => s.startsWith('Project-wide decisions'));
+      expect(projectWideSection).toBeDefined();
+      expect(projectWideSection).toContain('microservices');
+
+      const decisionsSection = sections.find(s => s.startsWith('Decisions'));
+      if (decisionsSection) {
+        expect(decisionsSection).toContain('bcrypt');
+        expect(decisionsSection).not.toContain('microservices');
+      }
+
+      expect(projectWideSection).not.toContain('Singleton pattern');
     });
   });
 });
