@@ -27,6 +27,7 @@ vi.mock('../core/config.js', () => ({
 
 vi.mock('../db/embeddings.js', () => ({
   storeEmbedding: vi.fn(),
+  findSimilar: vi.fn().mockReturnValue([]),
 }));
 
 function makeTmpDir(): string {
@@ -49,7 +50,7 @@ describe('handleQueryKnowledge', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('returns context when graph has relevant nodes', () => {
+  it('returns context when graph has relevant nodes', async () => {
     const entry = createNode(db, {
       name: 'AuthService',
       nodeType: 'concept',
@@ -74,21 +75,21 @@ describe('handleQueryKnowledge', () => {
       metadata: {},
     });
 
-    const result = handleQueryKnowledge(db, 'What about `AuthService`?');
+    const result = await handleQueryKnowledge(db, 'What about `AuthService`?');
     expect(result.content).toHaveLength(1);
     expect(result.content[0]!.type).toBe('text');
     expect(result.content[0]!.text).toContain('TokenStore');
     expect(result.content[0]!.text.length).toBeGreaterThan(0);
   });
 
-  it('returns empty message when graph is empty', () => {
-    const result = handleQueryKnowledge(db, '`SomeModule`');
+  it('returns empty message when graph is empty', async () => {
+    const result = await handleQueryKnowledge(db, '`SomeModule`');
     expect(result.content).toHaveLength(1);
     expect(result.content[0]!.type).toBe('text');
     expect(result.content[0]!.text).toBe('No knowledge stored yet.');
   });
 
-  it('returns empty message when no entry points extracted', () => {
+  it('returns empty message when no entry points extracted', async () => {
     createNode(db, {
       name: 'AuthService',
       nodeType: 'concept',
@@ -98,14 +99,14 @@ describe('handleQueryKnowledge', () => {
       metadata: {},
     });
 
-    const result = handleQueryKnowledge(db, 'tell me about stuff');
+    const result = await handleQueryKnowledge(db, 'tell me about stuff');
     expect(result.content).toHaveLength(1);
     expect(result.content[0]!.type).toBe('text');
     expect(result.content[0]!.text).toBe('No knowledge stored yet.');
   });
 
-  it('returns empty message for empty string question', () => {
-    const result = handleQueryKnowledge(db, '');
+  it('returns empty message for empty string question', async () => {
+    const result = await handleQueryKnowledge(db, '');
     expect(result.content).toHaveLength(1);
     expect(result.content[0]!.type).toBe('text');
     expect(result.content[0]!.text).toBe('No knowledge stored yet.');
@@ -168,7 +169,7 @@ describe('save_decision integration', () => {
       metadata: {},
     });
 
-    const queryResult = handleQueryKnowledge(db, 'What about `Use SQLite for storage`?');
+    const queryResult = await handleQueryKnowledge(db, 'What about `Use SQLite for storage`?');
     expect(queryResult.content).toHaveLength(1);
     expect(queryResult.content[0]!.text).not.toBe('No knowledge stored yet.');
     expect(queryResult.content[0]!.text).toContain('EmbeddedDatabasePattern');

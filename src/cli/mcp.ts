@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import type BetterSqlite3 from 'better-sqlite3';
-import { extractEntryPoints } from '../core/entry-points.js';
+import { resolveEntryPoints } from '../core/entry-points.js';
 import { spreadingActivation } from '../core/retrieval.js';
 import { buildContext } from '../core/context-builder.js';
 import { initializeSchema } from '../db/migrations.js';
@@ -18,11 +18,15 @@ type Database = BetterSqlite3.Database;
 
 type McpResponse = { content: Array<{ type: 'text'; text: string }> } | { content: Array<{ type: 'text'; text: string }>; isError: true };
 
-export function handleQueryKnowledge(
+export async function handleQueryKnowledge(
   db: Database,
   question: string,
-): { content: Array<{ type: 'text'; text: string }> } {
-  const entryPoints = extractEntryPoints(question);
+): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  const cfg = loadConfig();
+  const embeddingConfig = cfg.embedding?.provider
+    ? { provider: cfg.embedding.provider, apiKey: cfg.embedding.apiKey }
+    : undefined;
+  const entryPoints = await resolveEntryPoints(question, db, embeddingConfig);
   if (entryPoints.length === 0) {
     return { content: [{ type: 'text', text: 'No knowledge stored yet.' }] };
   }
@@ -136,7 +140,7 @@ export async function runMcp(cwd: string): Promise<void> {
     'query_knowledge',
     'Query the engram knowledge graph with a natural language question',
     { question: z.string().describe('Natural language question or context to retrieve knowledge for') },
-    (args) => handleQueryKnowledge(db, args.question),
+    async (args) => handleQueryKnowledge(db, args.question),
   );
 
   server.tool(

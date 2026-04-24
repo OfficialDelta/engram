@@ -6,7 +6,8 @@ import { initializeSchema } from '../../db/migrations.js';
 import { getDataDir, getDbPath } from '../../core/project-identity.js';
 import { buildContext } from '../../core/context-builder.js';
 import { spreadingActivation } from '../../core/retrieval.js';
-import { extractEntryPoints } from '../../core/entry-points.js';
+import { extractEntryPoints, resolveEntryPoints } from '../../core/entry-points.js';
+import { loadConfig } from '../../core/config.js';
 
 export { extractEntryPoints } from '../../core/entry-points.js';
 
@@ -20,7 +21,7 @@ function logError(dataDir: string, message: string): void {
   }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   try {
     const stdin = readFileSync(0, 'utf-8');
     const input = JSON.parse(stdin) as Record<string, unknown>;
@@ -28,14 +29,20 @@ function main(): void {
     const cwd = (input.cwd as string) ?? process.cwd();
     const prompt = (input.prompt as string) ?? '';
 
-    const entryPoints = extractEntryPoints(prompt);
+    const dbPath = getDbPath(cwd);
+    const db = initializeSchema(dbPath);
+
+    const cfg = loadConfig();
+    const embeddingConfig = cfg.embedding?.provider
+      ? { provider: cfg.embedding.provider, apiKey: cfg.embedding.apiKey }
+      : undefined;
+    const entryPoints = await resolveEntryPoints(prompt, db, embeddingConfig);
+
     if (entryPoints.length === 0) {
+      db.close();
       process.stdout.write('{}');
       process.exit(0);
     }
-
-    const dbPath = getDbPath(cwd);
-    const db = initializeSchema(dbPath);
 
     let additionalContext = '';
     try {
@@ -73,5 +80,5 @@ function main(): void {
 }
 
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
-  main();
+  main().catch(() => { process.stdout.write('{}'); process.exit(0); });
 }

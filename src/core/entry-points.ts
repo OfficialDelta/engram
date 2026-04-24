@@ -1,6 +1,11 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type BetterSqlite3 from 'better-sqlite3';
 import type { EntryPoint } from '../types.js';
+import { getEmbedding } from './embed.js';
+import { findSimilar } from '../db/embeddings.js';
+
+type Database = BetterSqlite3.Database;
 
 const FILE_PATH_PATTERN = /(?:^|\s|['"`(])(\.\/?(?:[\w.-]+\/)*[\w.-]+\.\w{1,10})(?=['"`)\s,]|$)|(?:^|\s|['"`(])((?:[\w@.-]+\/)+[\w.-]+\.\w{1,10})(?=['"`)\s,]|$)|(?:^|\s|['"`(])(\/(?:[\w.-]+\/)+[\w.-]+\.\w{1,10})(?=['"`)\s,]|$)/gm;
 const CONCEPT_PATTERN = /(?:[`'"]([\w][\w ./-]{1,60}[\w])['"`])/g;
@@ -26,6 +31,23 @@ export function extractEntryPoints(prompt: string): EntryPoint[] {
   }
 
   return entryPoints;
+}
+
+export async function resolveEntryPoints(
+  prompt: string,
+  db: Database,
+  config?: { provider?: string; apiKey?: string },
+): Promise<EntryPoint[]> {
+  const patternEntryPoints = extractEntryPoints(prompt);
+  if (patternEntryPoints.length > 0) return patternEntryPoints;
+  try {
+    const vectors = await getEmbedding([prompt], config);
+    if (!vectors[0]) return [];
+    const similar = findSimilar(db, vectors[0], 0.6, 5);
+    return similar.map(s => ({ type: 'node' as const, value: s.nodeId }));
+  } catch {
+    return [];
+  }
 }
 
 export function getRecentFileEntryPoints(dataDir: string): EntryPoint[] {
