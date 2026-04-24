@@ -263,8 +263,8 @@ export async function applyGraphChanges(
 
   type PreparedOp =
     | { kind: 'merge'; name: string; existingNodeId: string; node: GraphChangeRequest['nodesToCreate'][number]; updateDescription: boolean }
-    | { kind: 'create_child'; name: string; existingNodeId: string; node: GraphChangeRequest['nodesToCreate'][number]; embedding: number[] }
-    | { kind: 'create_new'; name: string; node: GraphChangeRequest['nodesToCreate'][number]; embedding: number[] };
+    | { kind: 'create_child'; name: string; existingNodeId: string; node: GraphChangeRequest['nodesToCreate'][number]; embedding?: number[] }
+    | { kind: 'create_new'; name: string; node: GraphChangeRequest['nodesToCreate'][number]; embedding?: number[] };
 
   const ops: PreparedOp[] = [];
 
@@ -278,12 +278,19 @@ export async function applyGraphChanges(
         : true;
       ops.push({ kind: 'merge', name: node.name, existingNodeId: resolution.existingNodeId, node, updateDescription: shouldUpdate });
     } else if (resolution.action === 'create_child' && resolution.existingNodeId) {
-      const embeddings = await getEmbedding([node.name + ' ' + node.description], embeddingConfig);
-      ops.push({ kind: 'create_child', name: node.name, existingNodeId: resolution.existingNodeId, node, embedding: embeddings[0]! });
+      ops.push({ kind: 'create_child', name: node.name, existingNodeId: resolution.existingNodeId, node });
     } else {
-      const embeddings = await getEmbedding([node.name + ' ' + node.description], embeddingConfig);
-      ops.push({ kind: 'create_new', name: node.name, node, embedding: embeddings[0]! });
+      ops.push({ kind: 'create_new', name: node.name, node });
     }
+  }
+
+  const needsEmbedding = ops.filter(
+    (op): op is Exclude<PreparedOp, { kind: 'merge' }> => op.kind !== 'merge'
+  );
+  if (needsEmbedding.length > 0) {
+    const texts = needsEmbedding.map(op => op.node.name + ' ' + op.node.description);
+    const embeddings = await getEmbedding(texts, embeddingConfig);
+    needsEmbedding.forEach((op, i) => { op.embedding = embeddings[i]!; });
   }
 
   db.transaction(() => {
@@ -328,7 +335,7 @@ export async function applyGraphChanges(
           }),
           metadata: { sourceEpisodes: [episodeId] },
         });
-        storeEmbedding(db, newNode.id, op.embedding);
+        storeEmbedding(db, newNode.id, op.embedding!);
         createEdge(db, {
           sourceNodeId: newNode.id,
           targetNodeId: op.existingNodeId,
@@ -352,7 +359,7 @@ export async function applyGraphChanges(
           }),
           metadata: { sourceEpisodes: [episodeId] },
         });
-        storeEmbedding(db, newNode.id, op.embedding);
+        storeEmbedding(db, newNode.id, op.embedding!);
         nodeIdMap.set(op.name, newNode.id);
       }
     }

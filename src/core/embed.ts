@@ -60,8 +60,7 @@ async function embedLocal(texts: string[]): Promise<number[][]> {
 }
 
 async function embedOllama(texts: string[], ollamaUrl: string, model: string): Promise<number[][]> {
-  const results: number[][] = [];
-  for (const text of texts) {
+  return Promise.all(texts.map(async (text) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     let response: Response;
@@ -92,9 +91,8 @@ async function embedOllama(texts: string[], ollamaUrl: string, model: string): P
     if (!json.embedding?.length) {
       throw new Error('Ollama returned malformed response: missing embedding');
     }
-    results.push(json.embedding);
-  }
-  return results;
+    return json.embedding;
+  }));
 }
 
 async function embedHTTP(
