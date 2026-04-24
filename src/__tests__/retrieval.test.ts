@@ -100,7 +100,7 @@ describe('spreadingActivation', () => {
     const b = makeNode(db, { name: 'B', strength: 1.0 });
 
     link(db, a.id, b.id, 0.1);
-    // B activation = 1.0 * 0.6 * 0.1 = 0.06 < 0.1 threshold
+    // B activation = 1.0 * 0.6 * 0.1 = 0.06 < 0.3 threshold
 
     const results = spreadingActivation(db, [{ type: 'node', value: a.id }]);
     const all = [...results.high, ...results.medium];

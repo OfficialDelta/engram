@@ -59,7 +59,7 @@ vi.mock('../core/context-builder.js', () => ({
 }));
 
 vi.mock('../core/retrieval.js', () => ({
-  spreadingActivation: vi.fn(() => ({ tier1: [], tier2: [], tier3: [] })),
+  spreadingActivation: vi.fn(() => ({ high: [], medium: [] })),
 }));
 
 describe('processPostCompact API key validation', () => {

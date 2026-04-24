@@ -128,6 +128,8 @@ export type TurnCompleteEvent = BaseEvent & {
   type: 'turn_complete';
   toolCallCount: number;
   turnNumber: number;
+  userMessage?: string;
+  agentSummary?: string;
 };
 
 export type EngramEvent =

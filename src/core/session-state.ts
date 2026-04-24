@@ -9,6 +9,7 @@ export type SessionState = {
   pendingContradictions: ContradictionResult[];
   turnCount: number;
   toolCallCount: number;
+  lastUserPrompt?: string;
 };
 
 function defaultState(): SessionState {
@@ -32,7 +33,7 @@ export function loadSessionState(dataDir: string, sessionId: string): SessionSta
     }
     const obj = parsed as Record<string, unknown>;
     const defaults = defaultState();
-    return {
+    const state: SessionState = {
       seenFiles: Array.isArray(obj['seenFiles']) ? (obj['seenFiles'] as string[]) : defaults.seenFiles,
       contradictionFailures: typeof obj['contradictionFailures'] === 'number' ? obj['contradictionFailures'] : defaults.contradictionFailures,
       contradictionDisabled: typeof obj['contradictionDisabled'] === 'boolean' ? obj['contradictionDisabled'] : defaults.contradictionDisabled,
@@ -40,6 +41,8 @@ export function loadSessionState(dataDir: string, sessionId: string): SessionSta
       turnCount: typeof obj['turnCount'] === 'number' ? obj['turnCount'] : defaults.turnCount,
       toolCallCount: typeof obj['toolCallCount'] === 'number' ? obj['toolCallCount'] : defaults.toolCallCount,
     };
+    if (typeof obj['lastUserPrompt'] === 'string') state.lastUserPrompt = obj['lastUserPrompt'];
+    return state;
   } catch {
     return defaultState();
   }

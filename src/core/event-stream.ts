@@ -23,6 +23,10 @@ function truncateToLines(text: string, maxLines: number): string {
   return lines.slice(0, maxLines).join('\n');
 }
 
+function formatEditSnippet(oldString: string, newString: string): string {
+  return `--- before\n${truncateToLines(oldString, 5)}\n+++ after\n${truncateToLines(newString, 5)}`;
+}
+
 function countNewlines(text: string): number {
   let count = 0;
   for (const ch of text) {
@@ -61,6 +65,7 @@ export function classifyToolCall(toolCall: RawToolCall): EngramEvent | null {
   }
 
   if (tool_name === 'Edit' || tool_name === 'MultiEdit') {
+    const oldString = (tool_input.old_string as string) ?? '';
     const newString = (tool_input.new_string as string) ?? '';
     return {
       type: 'file_write',
@@ -68,7 +73,7 @@ export function classifyToolCall(toolCall: RawToolCall): EngramEvent | null {
       timestamp,
       filePath: tool_input.file_path as string,
       linesChanged: countNewlines(newString),
-      evidenceSnippet: truncateToLines(newString, 10),
+      evidenceSnippet: formatEditSnippet(oldString, newString),
     } satisfies FileWriteEvent;
   }
 
@@ -264,12 +269,20 @@ export function getSessionEvents(sessionId: string, dataDir?: string): EngramEve
   return events;
 }
 
-export function buildTurnCompleteEvent(sessionId: string, toolCallCount: number, turnNumber: number): TurnCompleteEvent {
-  return {
+export function buildTurnCompleteEvent(
+  sessionId: string,
+  toolCallCount: number,
+  turnNumber: number,
+  options?: { userMessage?: string; agentSummary?: string },
+): TurnCompleteEvent {
+  const event: TurnCompleteEvent = {
     type: 'turn_complete',
     sessionId,
     timestamp: new Date().toISOString(),
     toolCallCount,
     turnNumber,
   };
+  if (options?.userMessage !== undefined) event.userMessage = options.userMessage;
+  if (options?.agentSummary !== undefined) event.agentSummary = options.agentSummary;
+  return event;
 }
