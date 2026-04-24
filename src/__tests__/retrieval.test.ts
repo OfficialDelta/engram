@@ -198,4 +198,38 @@ describe('spreadingActivation', () => {
 
     db.close();
   });
+
+  it('resolves name entry points via fuzzy fallback when exact match fails', () => {
+    const db = freshDb();
+    const named = makeNode(db, { name: 'Switch from Express to Fastify', strength: 1.0 });
+    const neighbor = makeNode(db, { name: 'neighbor', strength: 1.0 });
+
+    link(db, named.id, neighbor.id, 1.0);
+
+    const results = spreadingActivation(db, [{ type: 'name', value: 'Express' }]);
+    const all = [...results.high, ...results.medium, ...results.low];
+
+    expect(all.find(r => r.node.id === neighbor.id)).toBeDefined();
+
+    db.close();
+  });
+
+  it('prefers exact name match over fuzzy when both exist', () => {
+    const db = freshDb();
+    const exact = makeNode(db, { name: 'Express', strength: 1.0 });
+    const fuzzy = makeNode(db, { name: 'Switch from Express to Fastify', strength: 1.0 });
+    const exactNeighbor = makeNode(db, { name: 'exact-neighbor', strength: 1.0 });
+    const fuzzyNeighbor = makeNode(db, { name: 'fuzzy-neighbor', strength: 1.0 });
+
+    link(db, exact.id, exactNeighbor.id, 1.0);
+    link(db, fuzzy.id, fuzzyNeighbor.id, 1.0);
+
+    const results = spreadingActivation(db, [{ type: 'name', value: 'Express' }]);
+    const all = [...results.high, ...results.medium, ...results.low];
+
+    expect(all.find(r => r.node.id === exactNeighbor.id)).toBeDefined();
+    expect(all.find(r => r.node.id === fuzzyNeighbor.id)).toBeUndefined();
+
+    db.close();
+  });
 });

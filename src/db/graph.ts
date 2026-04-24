@@ -237,6 +237,14 @@ export function getNodesByName(db: Database, name: string): GraphNode[] {
   return rows.map(rowToNode);
 }
 
+export function getNodesByNameFuzzy(db: Database, name: string): GraphNode[] {
+  const pattern = '%' + escapeLike(name) + '%';
+  const rows = db.prepare(
+    `SELECT * FROM nodes WHERE name LIKE ? ESCAPE '\\'`
+  ).all(pattern) as NodeRow[];
+  return rows.map(rowToNode);
+}
+
 export function deleteNode(db: Database, nodeId: string): boolean {
   const existing = db.prepare('SELECT id FROM nodes WHERE id = ?').get(nodeId) as { id: string } | undefined;
   if (!existing) return false;

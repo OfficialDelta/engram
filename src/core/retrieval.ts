@@ -1,6 +1,6 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import type { EntryPoint, RetrievalConfig, TieredResults, NodeResult, GraphNode } from '../types.js';
-import { getNode, getNodesByFile, getNodesByName, getEdgesForNode } from '../db/graph.js';
+import { getNode, getNodesByFile, getNodesByName, getNodesByNameFuzzy, getEdgesForNode } from '../db/graph.js';
 
 type Database = BetterSqlite3.Database;
 
@@ -18,9 +18,15 @@ function resolveEntryPoints(db: Database, entryPoints: EntryPoint[]): GraphNode[
       case 'file':
         nodes.push(...getNodesByFile(db, ep.value));
         break;
-      case 'name':
-        nodes.push(...getNodesByName(db, ep.value));
+      case 'name': {
+        const exactMatches = getNodesByName(db, ep.value);
+        if (exactMatches.length > 0) {
+          nodes.push(...exactMatches);
+        } else {
+          nodes.push(...getNodesByNameFuzzy(db, ep.value));
+        }
         break;
+      }
       case 'node': {
         const node = getNode(db, ep.value);
         if (node) nodes.push(node);

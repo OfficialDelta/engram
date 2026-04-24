@@ -11,6 +11,7 @@ import {
   getConnectedNodes,
   getEdgesForNode,
   getNodesByName,
+  getNodesByNameFuzzy,
   deleteNode,
   deleteEdge,
   createEpisode,
@@ -287,6 +288,76 @@ describe('graph CRUD operations', () => {
 
       const results = getNodesByName(db, 'does-not-exist');
       expect(results).toEqual([]);
+
+      db.close();
+    });
+  });
+
+  describe('getNodesByNameFuzzy', () => {
+    it('matches partial name substring', () => {
+      const db = freshDb();
+      createNode(db, makeNodeInput({ name: 'AuthService' }));
+
+      const results = getNodesByNameFuzzy(db, 'Auth');
+      expect(results).toHaveLength(1);
+      expect(results[0]!.name).toBe('AuthService');
+
+      db.close();
+    });
+
+    it('matches case-insensitively', () => {
+      const db = freshDb();
+      createNode(db, makeNodeInput({ name: 'AuthService' }));
+
+      const results = getNodesByNameFuzzy(db, 'authservice');
+      expect(results).toHaveLength(1);
+      expect(results[0]!.name).toBe('AuthService');
+
+      db.close();
+    });
+
+    it('matches full name (LIKE is superset of exact)', () => {
+      const db = freshDb();
+      createNode(db, makeNodeInput({ name: 'AuthService' }));
+
+      const results = getNodesByNameFuzzy(db, 'AuthService');
+      expect(results).toHaveLength(1);
+      expect(results[0]!.name).toBe('AuthService');
+
+      db.close();
+    });
+
+    it('returns empty array for no match', () => {
+      const db = freshDb();
+      createNode(db, makeNodeInput({ name: 'AuthService' }));
+
+      const results = getNodesByNameFuzzy(db, 'nonexistent');
+      expect(results).toEqual([]);
+
+      db.close();
+    });
+
+    it('returns multiple matches', () => {
+      const db = freshDb();
+      createNode(db, makeNodeInput({ name: 'ExpressRouter' }));
+      createNode(db, makeNodeInput({ name: 'ExpressMiddleware' }));
+      createNode(db, makeNodeInput({ name: 'FastifyRouter' }));
+
+      const results = getNodesByNameFuzzy(db, 'Express');
+      const names = results.map(n => n.name).sort();
+      expect(names).toEqual(['ExpressMiddleware', 'ExpressRouter']);
+
+      db.close();
+    });
+
+    it('escapes special LIKE characters in search term', () => {
+      const db = freshDb();
+      createNode(db, makeNodeInput({ name: '100% complete' }));
+      createNode(db, makeNodeInput({ name: '100 items' }));
+
+      const results = getNodesByNameFuzzy(db, '100%');
+      expect(results).toHaveLength(1);
+      expect(results[0]!.name).toBe('100% complete');
 
       db.close();
     });
