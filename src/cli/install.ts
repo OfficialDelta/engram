@@ -12,6 +12,8 @@ const HOOK_EVENTS = {
   SessionStart: { handler: 'session-start', timeout: 30 },
   UserPromptSubmit: { handler: 'user-prompt-submit', timeout: 30 },
   Stop: { handler: 'stop', timeout: 10 },
+  PostCompact: { handler: 'post-compact', timeout: 10 },
+  SessionEnd: { handler: 'session-end', timeout: 10 },
 } as const;
 
 function resolveHookDir(): string {

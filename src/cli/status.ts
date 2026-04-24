@@ -8,7 +8,7 @@ import { Database } from '../db/migrations.js';
 import { loadConfig, maskApiKey } from '../core/config.js';
 import { findUnconsolidatedSessions, findFailedConsolidations } from '../core/consolidation.js';
 
-const HOOK_EVENT_NAMES = ['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop'] as const;
+const HOOK_EVENT_NAMES = ['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop', 'PostCompact', 'SessionEnd'] as const;
 
 interface HookEntry {
   type: string;

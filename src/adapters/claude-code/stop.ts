@@ -2,11 +2,9 @@
 import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildTurnCompleteEvent, appendEvent, getSessionEvents } from '../../core/event-stream.js';
+import { buildTurnCompleteEvent, appendEvent } from '../../core/event-stream.js';
 import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identity.js';
 import { loadSessionState, saveSessionState } from '../../core/session-state.js';
-import { spawnConsolidation } from '../../core/consolidation.js';
-import { loadConfig } from '../../core/config.js';
 
 function logError(dataDir: string, message: string): void {
   try {
@@ -23,10 +21,6 @@ export function processStop(
   dataDir: string,
   dbPath: string,
 ): Record<string, unknown> {
-  const cfg = loadConfig();
-  const turnThreshold = cfg.consolidation.turnThreshold ?? 5;
-  const eventThreshold = cfg.consolidation.eventThreshold ?? 50;
-
   const state = loadSessionState(dataDir, sessionId);
   state.turnCount++;
 
@@ -35,18 +29,6 @@ export function processStop(
 
   state.toolCallCount = 0;
   saveSessionState(dataDir, sessionId, state);
-
-  const shouldConsolidate =
-    state.turnCount >= turnThreshold ||
-    getSessionEvents(sessionId, dataDir).length >= eventThreshold;
-
-  if (shouldConsolidate) {
-    if (!cfg.llm.apiKey && !process.env.ANTHROPIC_API_KEY) {
-      console.error('[engram] Consolidation skipped: no API key configured. Run "engram config" to set up.');
-    } else {
-      spawnConsolidation(sessionId, dbPath, dataDir);
-    }
-  }
 
   return {};
 }
