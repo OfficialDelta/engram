@@ -1,4 +1,6 @@
+import { mkdirSync, appendFileSync } from 'node:fs';
 import path from 'node:path';
+import { join } from 'node:path';
 import type {
   EngramEvent,
   ProgressVelocity,
@@ -120,4 +122,15 @@ export function computeMetrics(events: EngramEvent[]): MetricResults {
     searchToActRatio: searchToActRatio(events),
     errorRepetition: errorRepetition(events),
   };
+}
+
+export function appendMetrics(sessionId: string, metrics: MetricResults, dataDir: string): void {
+  try {
+    const dir = join(dataDir, 'metrics');
+    mkdirSync(dir, { recursive: true });
+    const entry = { timestamp: new Date().toISOString(), sessionId, ...metrics };
+    appendFileSync(join(dir, `${sessionId}.metrics.jsonl`), JSON.stringify(entry) + '\n');
+  } catch {
+    // metrics logging must never throw
+  }
 }

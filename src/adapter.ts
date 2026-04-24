@@ -5,6 +5,7 @@ import { initializeSchema } from './db/migrations.js';
 import { getDataDir, getDbPath, ensureDataDirs } from './core/project-identity.js';
 import { loadSessionState, saveSessionState, type SessionState } from './core/session-state.js';
 import { classifyToolCall, appendEvent, detectDerivedEvents, getSessionEvents, buildTurnCompleteEvent } from './core/event-stream.js';
+import { computeMetrics, appendMetrics } from './core/metacognitive.js';
 import { getFileAnnotations } from './core/involuntary.js';
 import { buildContext } from './core/context-builder.js';
 import { spreadingActivation } from './core/retrieval.js';
@@ -67,6 +68,13 @@ export function onToolCall(session: AdapterSession, toolCall: RawToolCall): Tool
 
   const state = loadSessionState(dataDir, sessionId);
   state.toolCallCount++;
+
+  if (state.toolCallCount % 10 === 0) {
+    try {
+      const metrics = computeMetrics(priorEvents);
+      appendMetrics(sessionId, metrics, dataDir);
+    } catch { /* metrics must never crash hook */ }
+  }
 
   let annotations: Annotation[] = [];
 

@@ -4,6 +4,7 @@ import { join, dirname, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { classifyToolCall, appendEvent, detectDerivedEvents, getSessionEvents } from '../../core/event-stream.js';
+import { computeMetrics, appendMetrics } from '../../core/metacognitive.js';
 import { getFileAnnotations } from '../../core/involuntary.js';
 import { initializeSchema } from '../../db/migrations.js';
 import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identity.js';
@@ -66,6 +67,13 @@ export function processPostToolUse(
 
   const state = loadSessionState(dataDir, rawToolCall.session_id);
   state.toolCallCount++;
+
+  if (state.toolCallCount % 10 === 0) {
+    try {
+      const metrics = computeMetrics(priorEvents);
+      appendMetrics(rawToolCall.session_id, metrics, dataDir);
+    } catch { /* metrics must never crash hook */ }
+  }
 
   let annotations: Annotation[] = [];
 

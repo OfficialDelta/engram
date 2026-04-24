@@ -29,7 +29,7 @@ export function getDbPath(cwd: string): string {
 
 export function ensureDataDirs(cwd: string): string {
   const dataDir = getDataDir(cwd);
-  for (const sub of ['events', 'sessions', 'episodes', 'logs']) {
+  for (const sub of ['events', 'sessions', 'episodes', 'logs', 'metrics']) {
     mkdirSync(join(dataDir, sub), { recursive: true });
   }
   return dataDir;
