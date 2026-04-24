@@ -10,6 +10,7 @@ export type SessionState = {
   turnCount: number;
   toolCallCount: number;
   lastUserPrompt?: string;
+  consolidationSpawned?: boolean;
 };
 
 function defaultState(): SessionState {
@@ -42,6 +43,7 @@ export function loadSessionState(dataDir: string, sessionId: string): SessionSta
       toolCallCount: typeof obj['toolCallCount'] === 'number' ? obj['toolCallCount'] : defaults.toolCallCount,
     };
     if (typeof obj['lastUserPrompt'] === 'string') state.lastUserPrompt = obj['lastUserPrompt'];
+    if (typeof obj['consolidationSpawned'] === 'boolean') state.consolidationSpawned = obj['consolidationSpawned'];
     return state;
   } catch {
     return defaultState();

@@ -583,6 +583,47 @@ export function findFailedConsolidations(dataDir: string): Array<{ sessionId: st
   return results;
 }
 
+const STALE_LOCK_MS = 1800000; // 30 minutes
+
+export function isEpisodeComplete(dataDir: string, sessionId: string): boolean {
+  return fs.existsSync(path.join(dataDir, 'episodes', `${sessionId}.episode.json`));
+}
+
+export function acquireConsolidationLock(dataDir: string, sessionId: string): boolean {
+  const lockPath = path.join(dataDir, 'episodes', `${sessionId}.consolidating.lock`);
+  try {
+    fs.mkdirSync(path.join(dataDir, 'episodes'), { recursive: true });
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }), { flag: 'wx' });
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      try {
+        const stat = fs.statSync(lockPath);
+        if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
+          fs.unlinkSync(lockPath);
+          try {
+            fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }), { flag: 'wx' });
+            return true;
+          } catch {
+            return false;
+          }
+        }
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+}
+
+export function releaseConsolidationLock(dataDir: string, sessionId: string): void {
+  try {
+    fs.unlinkSync(path.join(dataDir, 'episodes', `${sessionId}.consolidating.lock`));
+  } catch {
+    // swallow ENOENT or any other error — P004 compliance
+  }
+}
+
 export function spawnConsolidation(
   sessionId: string,
   dbPath: string,

@@ -6,6 +6,7 @@ import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identi
 import { spawnConsolidation, readConsolidationTimestamp } from '../../core/consolidation.js';
 import { getSessionEvents } from '../../core/event-stream.js';
 import { loadConfig } from '../../core/config.js';
+import { loadSessionState, saveSessionState } from '../../core/session-state.js';
 
 function logError(dataDir: string, message: string): void {
   try {
@@ -40,7 +41,15 @@ export function processSessionEnd(
     return {};
   }
 
+  const state = loadSessionState(dataDir, sessionId);
+  if (state.consolidationSpawned) {
+    logError(dataDir, `Consolidation spawn skipped: already spawned for session ${sessionId}`);
+    return {};
+  }
+
   spawnConsolidation(sessionId, dbPath, dataDir);
+  state.consolidationSpawned = true;
+  saveSessionState(dataDir, sessionId, state);
   return {};
 }
 

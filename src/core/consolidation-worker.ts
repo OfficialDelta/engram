@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { consolidateSession, readConsolidationTimestamp, writeConsolidationTimestamp } from './consolidation.js';
+import { consolidateSession, readConsolidationTimestamp, writeConsolidationTimestamp, isEpisodeComplete, acquireConsolidationLock, releaseConsolidationLock } from './consolidation.js';
 import { loadConfig } from './config.js';
 
 const sessionId = process.argv[2];
@@ -20,6 +20,16 @@ const cfg = loadConfig();
 
 if (cfg.llm.apiKey && !process.env.ANTHROPIC_API_KEY) {
   process.env.ANTHROPIC_API_KEY = cfg.llm.apiKey;
+}
+
+if (isEpisodeComplete(dataDir, sessionId)) {
+  fs.writeFileSync(logPath, `[${new Date().toISOString()}] Skipped: episode already exists for session ${sessionId}\n`);
+  process.exit(0);
+}
+
+if (!acquireConsolidationLock(dataDir, sessionId)) {
+  fs.writeFileSync(logPath, `[${new Date().toISOString()}] Skipped: consolidation lock held for session ${sessionId}\n`);
+  process.exit(0);
 }
 
 try {
@@ -45,6 +55,7 @@ try {
   fs.writeFileSync(logPath, `[${new Date().toISOString()}] Consolidation completed for session ${sessionId}\n`);
   process.exit(0);
 } catch (err) {
+  releaseConsolidationLock(dataDir, sessionId);
   const message = err instanceof Error ? err.stack ?? err.message : String(err);
   fs.writeFileSync(logPath, `[${new Date().toISOString()}] Consolidation failed for session ${sessionId}:\n${message}\n`);
   try {
@@ -58,4 +69,6 @@ try {
     // marker write failure must not mask the original error
   }
   process.exit(1);
+} finally {
+  releaseConsolidationLock(dataDir, sessionId);
 }

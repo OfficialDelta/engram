@@ -13,6 +13,7 @@ import { findUnconsolidatedSessions, spawnConsolidation } from './core/consolida
 import { extractEntryPoints } from './core/entry-points.js';
 import { runMaintenance } from './core/maintenance.js';
 import { loadConfig, getMaintenanceConfig } from './core/config.js';
+import { getDimensions } from './core/embed.js';
 import type { AdapterConfig, AdapterSession, ToolCallResult, RawToolCall, Annotation, FileReadEvent, FileWriteEvent, NodeResult } from './types.js';
 
 const CONSOLIDATION_TURN_THRESHOLD = 5;
@@ -24,7 +25,9 @@ export function createSession(config?: AdapterConfig): AdapterSession {
   const dbPath = config?.dbPath ?? getDbPath(cwd);
   const sessionId = config?.sessionId ?? randomUUID();
 
-  const db = initializeSchema(dbPath);
+  const engramConfig = loadConfig();
+  const embeddingProvider = engramConfig.embedding.provider ?? 'voyage-3-lite';
+  const db = initializeSchema(dbPath, getDimensions(embeddingProvider), embeddingProvider);
 
   const defaultState: SessionState = {
     seenFiles: [],
