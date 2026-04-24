@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { initializeSchema } from './db/migrations.js';
 import { getDataDir, getDbPath, ensureDataDirs } from './core/project-identity.js';
 import { loadSessionState, saveSessionState, type SessionState } from './core/session-state.js';
@@ -7,7 +9,7 @@ import { getFileAnnotations } from './core/involuntary.js';
 import { buildContext } from './core/context-builder.js';
 import { spreadingActivation } from './core/retrieval.js';
 import { findUnconsolidatedSessions, spawnConsolidation } from './core/consolidation.js';
-import { extractEntryPoints, getRecentFileEntryPoints } from './core/entry-points.js';
+import { extractEntryPoints } from './core/entry-points.js';
 import { runMaintenance } from './core/maintenance.js';
 import { loadConfig, getMaintenanceConfig } from './core/config.js';
 import type { AdapterConfig, AdapterSession, ToolCallResult, RawToolCall, Annotation, FileReadEvent, FileWriteEvent } from './types.js';
@@ -115,20 +117,13 @@ export function onSessionStart(session: AdapterSession): { context: string } {
     spawnConsolidation(oldSessionId, dbPath, dataDir);
   }
 
-  let context = '';
   try {
-    const entryPoints = getRecentFileEntryPoints(dataDir);
-    if (entryPoints.length > 0) {
-      const tieredResults = spreadingActivation(db, entryPoints);
-      context = buildContext([], [], tieredResults);
-    }
+    writeFileSync(join(dataDir, 'events', `${sessionId}.injected.json`), '[]');
   } catch {
-    // retrieval failures are non-fatal
+    // P004: injected.json reset must never throw
   }
 
-  if (maintenanceSummary) {
-    context = maintenanceSummary + context;
-  }
+  let context = maintenanceSummary;
 
   return { context };
 }

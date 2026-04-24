@@ -1,14 +1,11 @@
 #!/usr/bin/env node
-import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializeSchema } from '../../db/migrations.js';
 import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identity.js';
 import { saveSessionState, type SessionState } from '../../core/session-state.js';
-import { buildContext } from '../../core/context-builder.js';
-import { spreadingActivation } from '../../core/retrieval.js';
 import { findUnconsolidatedSessions, spawnConsolidation, findFailedConsolidations } from '../../core/consolidation.js';
-import { getRecentFileEntryPoints } from '../../core/entry-points.js';
 import { runMaintenance } from '../../core/maintenance.js';
 import { loadConfig, getMaintenanceConfig } from '../../core/config.js';
 
@@ -56,6 +53,12 @@ export function processSessionStart(
   };
   saveSessionState(dataDir, sessionId, defaultState);
 
+  try {
+    writeFileSync(join(dataDir, 'events', `${sessionId}.injected.json`), '[]');
+  } catch {
+    // P004: injected.json reset must never throw
+  }
+
   let additionalContext = '';
   try {
     const failures = findFailedConsolidations(dataDir);
@@ -66,16 +69,6 @@ export function processSessionStart(
   } catch {
     // P004: failure marker reading must never throw
   }
-  try {
-    const entryPoints = getRecentFileEntryPoints(dataDir);
-    if (entryPoints.length > 0) {
-      const tieredResults = spreadingActivation(db, entryPoints);
-      additionalContext = buildContext([], [], tieredResults);
-    }
-  } catch (err) {
-    logError(dataDir, `Spreading activation failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
   db.close();
 
   if (maintenanceSummary) {

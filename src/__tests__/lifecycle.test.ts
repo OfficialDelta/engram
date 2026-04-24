@@ -153,12 +153,11 @@ describe('Capture → Consolidate → Retrieve', () => {
     db.close();
   });
 
-  it('processSessionStart returns prior knowledge in additionalContext', async () => {
+  it('processSessionStart does not return retrieval context (retrieval removed)', async () => {
     const { appendEvent } = await import('../core/event-stream.js');
     const { consolidateSession } = await import('../core/consolidation.js');
     const { processSessionStart } = await import('../adapters/claude-code/session-start.js');
 
-    // Create stub files so supersessionCheck doesn't mark nodes as superseded
     fs.mkdirSync(path.join(tmpDir, 'src', 'utils'), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, 'src', 'auth.ts'), '');
     fs.writeFileSync(path.join(tmpDir, 'src', 'utils', 'crypto.ts'), '');
@@ -166,7 +165,6 @@ describe('Capture → Consolidate → Retrieve', () => {
     const absAuth = path.join(tmpDir, 'src', 'auth.ts');
     const absCrypto = path.join(tmpDir, 'src', 'utils', 'crypto.ts');
 
-    // Override affectedFiles with absolute paths that exist on disk
     const localPass2: typeof pass2Input = {
       ...pass2Input,
       changes: {
@@ -178,8 +176,6 @@ describe('Capture → Consolidate → Retrieve', () => {
       },
     };
 
-    // Only file_write to src/auth.ts so auth-middleware is the sole entry point;
-    // bcrypt-hashing (linked to src/utils/crypto.ts) is reached via edge traversal.
     appendEvent('sess-1', { type: 'file_read', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: absAuth }, tmpDir);
     appendEvent('sess-1', { type: 'file_write', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: absAuth, linesChanged: 10, evidenceSnippet: 'jwt middleware' }, tmpDir);
     appendEvent('sess-1', { type: 'file_read', sessionId: 'sess-1', timestamp: new Date().toISOString(), filePath: absCrypto }, tmpDir);
@@ -191,10 +187,7 @@ describe('Capture → Consolidate → Retrieve', () => {
 
     const result = processSessionStart('sess-2', tmpDir, dbPath);
 
-    const ctx = result as { hookSpecificOutput?: { additionalContext?: string } };
-    expect(ctx.hookSpecificOutput).toBeDefined();
-    expect(ctx.hookSpecificOutput!.additionalContext).toBeDefined();
-    expect(ctx.hookSpecificOutput!.additionalContext).toContain('bcrypt-hashing');
+    expect(result).toEqual({});
   });
 });
 

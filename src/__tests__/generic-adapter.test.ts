@@ -163,8 +163,7 @@ describe('onSessionStart', () => {
     expect(typeof result.context).toBe('string');
   });
 
-  it('returns non-empty context when prior session has file_write events and DB has connected nodes', () => {
-    // Create stub files so supersessionCheck doesn't mark nodes as superseded
+  it('does not return retrieval context even when DB has connected nodes (retrieval removed)', () => {
     const srcDir = path.join(tmpDir, 'src');
     fs.mkdirSync(srcDir, { recursive: true });
     fs.writeFileSync(path.join(srcDir, 'auth.ts'), '');
@@ -216,8 +215,7 @@ describe('onSessionStart', () => {
     const newSession = createSession({ cwd: tmpDir });
     try {
       const result = onSessionStart(newSession);
-      expect(result.context.length).toBeGreaterThan(0);
-      expect(result.context).toContain('TokenStore');
+      expect(result.context).not.toContain('TokenStore');
     } finally {
       newSession.close();
     }
