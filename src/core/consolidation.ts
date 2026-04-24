@@ -16,7 +16,7 @@ import { initializeSchema } from '../db/migrations.js';
 import { cliPass1Summarize, cliPass2Extract, cliDiscussionConsolidate } from './cli-consolidation.js';
 import { getSessionEvents } from './event-stream.js';
 import { computeStrength } from './strength.js';
-import { resolveEntity } from './entity-resolution.js';
+import { resolveEntity, shouldUpdateDescription } from './entity-resolution.js';
 import { getEmbedding, getDimensions } from './embed.js';
 import { createNode, updateNode, createEdge, createEpisode, getNode } from '../db/graph.js';
 import { storeEmbedding } from '../db/embeddings.js';
@@ -261,7 +261,7 @@ export async function applyGraphChanges(
   const nodeIdMap = new Map<string, string>();
 
   type PreparedOp =
-    | { kind: 'merge'; name: string; existingNodeId: string; node: GraphChangeRequest['nodesToCreate'][number] }
+    | { kind: 'merge'; name: string; existingNodeId: string; node: GraphChangeRequest['nodesToCreate'][number]; updateDescription: boolean }
     | { kind: 'create_child'; name: string; existingNodeId: string; node: GraphChangeRequest['nodesToCreate'][number]; embedding: number[] }
     | { kind: 'create_new'; name: string; node: GraphChangeRequest['nodesToCreate'][number]; embedding: number[] };
 
@@ -271,7 +271,11 @@ export async function applyGraphChanges(
     const resolution = await resolveEntity(db, node.name, node.description, embeddingConfig);
 
     if (resolution.action === 'merge' && resolution.existingNodeId) {
-      ops.push({ kind: 'merge', name: node.name, existingNodeId: resolution.existingNodeId, node });
+      const existing = getNode(db, resolution.existingNodeId);
+      const shouldUpdate = existing
+        ? await shouldUpdateDescription(existing.description, node.description, embeddingConfig)
+        : true;
+      ops.push({ kind: 'merge', name: node.name, existingNodeId: resolution.existingNodeId, node, updateDescription: shouldUpdate });
     } else if (resolution.action === 'create_child' && resolution.existingNodeId) {
       const embeddings = await getEmbedding([node.name + ' ' + node.description], embeddingConfig);
       ops.push({ kind: 'create_child', name: node.name, existingNodeId: resolution.existingNodeId, node, embedding: embeddings[0]! });
@@ -291,7 +295,9 @@ export async function applyGraphChanges(
           sourceEpisodes.push(episodeId);
           const newMeta = { ...meta, sourceEpisodes };
           updateNode(db, op.existingNodeId, {
-            description: existing.description + '; ' + op.node.description,
+            ...(op.updateDescription
+              ? { description: existing.description + '; ' + op.node.description }
+              : {}),
             metadata: newMeta,
           });
           const newStrength = computeStrength({

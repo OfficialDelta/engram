@@ -3,6 +3,21 @@ import type { MergeAction } from '../types.js';
 import { getEmbedding } from './embed.js';
 import { findSimilar } from '../db/embeddings.js';
 
+export async function shouldUpdateDescription(
+  existingDescription: string,
+  proposedDescription: string,
+  embeddingConfig?: { provider?: string; apiKey?: string },
+): Promise<boolean> {
+  if (existingDescription === proposedDescription) return false;
+  const embeddings = await getEmbedding(
+    [existingDescription, proposedDescription],
+    embeddingConfig,
+  );
+  const [a, b] = [embeddings[0]!, embeddings[1]!];
+  const dot = a.reduce((sum, v, i) => sum + v * b[i]!, 0);
+  return dot < 0.9;
+}
+
 export async function resolveEntity(
   db: DatabaseType,
   proposedName: string,

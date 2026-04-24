@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initializeSchema } from '../db/migrations.js';
 import { createNode } from '../db/graph.js';
 import { storeEmbedding } from '../db/embeddings.js';
-import { resolveEntity } from '../core/entity-resolution.js';
+import { resolveEntity, shouldUpdateDescription } from '../core/entity-resolution.js';
 import type BetterSqlite3 from 'better-sqlite3';
 
 vi.mock('../core/embed.js', () => ({
@@ -106,5 +106,35 @@ describe('resolveEntity', () => {
     expect(result.action).toBe('merge');
     expect(result.existingNodeId).toBe(nodeA);
     expect(result.similarity).toBeGreaterThan(0.95);
+  });
+});
+
+describe('shouldUpdateDescription', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns false for identical strings without embedding call', async () => {
+    const result = await shouldUpdateDescription('same text', 'same text');
+    expect(result).toBe(false);
+    expect(mockGetEmbedding).not.toHaveBeenCalled();
+  });
+
+  it('returns false when cosine similarity > 0.9', async () => {
+    const v1 = makeBaseVector();
+    const v2 = makeVectorWithSimilarity(0.95);
+    mockGetEmbedding.mockResolvedValueOnce([v1, v2]);
+
+    const result = await shouldUpdateDescription('description A', 'description B');
+    expect(result).toBe(false);
+  });
+
+  it('returns true when cosine similarity < 0.9', async () => {
+    const v1 = makeBaseVector();
+    const v2 = makeVectorWithSimilarity(0.5);
+    mockGetEmbedding.mockResolvedValueOnce([v1, v2]);
+
+    const result = await shouldUpdateDescription('entry module', 'error handling');
+    expect(result).toBe(true);
   });
 });

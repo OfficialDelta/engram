@@ -4,6 +4,7 @@ import path from 'node:path';
 import { consolidateSession, readConsolidationTimestamp, writeConsolidationTimestamp, isEpisodeComplete, acquireConsolidationLock, releaseConsolidationLock } from './consolidation.js';
 import { loadConfig } from './config.js';
 import { validateEmbeddingDimension } from './embed.js';
+import { loadSessionState, saveSessionState } from './session-state.js';
 import { Database } from '../db/migrations.js';
 import * as sqliteVec from 'sqlite-vec';
 
@@ -80,6 +81,11 @@ try {
   };
   await consolidateSession(sessionId, dbPath, dataDir, consolidationConfig);
   writeConsolidationTimestamp(dataDir, sessionId, new Date().toISOString());
+  try {
+    const state = loadSessionState(dataDir, sessionId);
+    state.consolidationSpawned = false;
+    saveSessionState(dataDir, sessionId, state);
+  } catch { /* state reset is best-effort */ }
   fs.writeFileSync(logPath, `[${new Date().toISOString()}] Consolidation completed for session ${sessionId}\n`);
   process.exit(0);
 } catch (err) {

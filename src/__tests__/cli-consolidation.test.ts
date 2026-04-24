@@ -29,6 +29,18 @@ vi.mock('../core/event-stream.js', () => ({
   getSessionEvents: vi.fn(() => []),
 }));
 
+vi.mock('../core/session-state.js', () => ({
+  loadSessionState: vi.fn(() => ({
+    seenFiles: [],
+    contradictionFailures: 0,
+    contradictionDisabled: false,
+    pendingContradictions: [],
+    turnCount: 0,
+    toolCallCount: 0,
+  })),
+  saveSessionState: vi.fn(),
+}));
+
 // ── mapModelToCli ──────────────────────────────────────────────
 
 describe('mapModelToCli', () => {

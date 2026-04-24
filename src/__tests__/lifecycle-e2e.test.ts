@@ -234,6 +234,10 @@ describe('Full Lifecycle with PostCompact Consolidation Cycle', () => {
     const mockClient1 = createMockClient(batch1Pass1JSON, batch1Pass2Input);
     await consolidateSession(sessionId, dbPath, tmpDir, { client: mockClient1 });
     writeConsolidationTimestamp(tmpDir, sessionId, new Date().toISOString());
+    // Reset spawn flag (real worker does this after successful consolidation)
+    const postConsolidateState = loadSessionState(tmpDir, sessionId);
+    postConsolidateState.consolidationSpawned = false;
+    saveSessionState(tmpDir, sessionId, postConsolidateState);
 
     // Verify batch 1 nodes in DB
     const db1 = initializeSchema(dbPath);
