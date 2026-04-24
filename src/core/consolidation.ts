@@ -13,6 +13,7 @@ import type {
 } from '../types.js';
 import type { DatabaseType } from '../db/migrations.js';
 import { initializeSchema } from '../db/migrations.js';
+import { cliPass1Summarize, cliPass2Extract, cliDiscussionConsolidate } from './cli-consolidation.js';
 import { getSessionEvents } from './event-stream.js';
 import { computeStrength } from './strength.js';
 import { resolveEntity } from './entity-resolution.js';
@@ -440,9 +441,12 @@ export async function consolidateSession(
   const windowOverlap = config?.windowOverlap ?? 3;
   const pass1Model = config?.pass1Model ?? 'claude-sonnet-4-6';
   const pass2Model = config?.pass2Model ?? 'claude-opus-4-6';
+  const provider = config?.consolidationProvider ?? 'api';
 
-  const client = (config?.client as Parameters<typeof pass1Summarize>[1]) ??
-    new (await import('@anthropic-ai/sdk')).default();
+  const client = provider === 'api'
+    ? ((config?.client as Parameters<typeof pass1Summarize>[1]) ??
+      new (await import('@anthropic-ai/sdk')).default())
+    : undefined;
 
   let events = getSessionEvents(sessionId, dataDir);
   if (config?.sinceTimestamp) {
@@ -452,7 +456,9 @@ export async function consolidateSession(
 
   if (shouldUseDiscussionConsolidation(events)) {
     const discussionModel = 'claude-haiku-4-5';
-    const result = await discussionConsolidate(events, client, discussionModel);
+    const result = provider === 'claude-cli'
+      ? await cliDiscussionConsolidate(events, discussionModel)
+      : await discussionConsolidate(events, client!, discussionModel);
     const embProv = config?.embeddingConfig?.provider ?? 'voyage-3-lite';
     const db = initializeSchema(dbPath, getDimensions(embProv), embProv);
     try {
@@ -479,8 +485,12 @@ export async function consolidateSession(
 
   try {
     const windows = windowEvents(events, windowSize, windowOverlap);
-    const summaries = await pass1Summarize(windows, client, pass1Model);
-    const { episode, changes } = await pass2Extract(summaries, client, pass2Model);
+    const summaries = provider === 'claude-cli'
+      ? await cliPass1Summarize(windows, pass1Model)
+      : await pass1Summarize(windows, client!, pass1Model);
+    const { episode, changes } = provider === 'claude-cli'
+      ? await cliPass2Extract(summaries, pass2Model)
+      : await pass2Extract(summaries, client!, pass2Model);
 
     const episodeRecord = createEpisode(db, {
       sessionId,

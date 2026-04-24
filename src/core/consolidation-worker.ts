@@ -25,6 +25,7 @@ if (cfg.llm.apiKey && !process.env.ANTHROPIC_API_KEY) {
 try {
   const sinceTimestamp = readConsolidationTimestamp(dataDir, sessionId);
   const consolidationConfig = {
+    ...(cfg.consolidation?.provider ? { consolidationProvider: cfg.consolidation.provider } : {}),
     ...(cfg.llm.pass1Model ? { pass1Model: cfg.llm.pass1Model } : {}),
     ...(cfg.llm.pass2Model ? { pass2Model: cfg.llm.pass2Model } : {}),
     ...(cfg.consolidation.windowSize ? { windowSize: cfg.consolidation.windowSize } : {}),
