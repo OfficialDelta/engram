@@ -20,6 +20,7 @@ Commands:
   consolidate Manually consolidate stale sessions
   inspect     Show detailed knowledge graph summary
   re-embed    Re-embed all nodes after changing embedding provider
+  ingest      Scan codebase to cold-start the knowledge graph
 
 Run 'engram <command> --help' for more information on a command.
 
@@ -177,9 +178,21 @@ Options:
       await runReEmbed({ cwd: process.cwd(), dryRun });
       break;
     }
+    case 'ingest': {
+      if (process.argv.slice(3).includes('--help')) {
+        const { printUsage: printIngestUsage } = await import('./ingest.js');
+        printIngestUsage();
+        break;
+      }
+      const { runIngest } = await import('./ingest.js');
+      const ingestArgs = process.argv.slice(3);
+      const dryRun = ingestArgs.includes('--dry-run');
+      await runIngest({ cwd: process.cwd(), dryRun });
+      break;
+    }
     default:
       if (subcommand && subcommand !== '--help' && subcommand !== '-h') {
-        console.error(`Unknown command: ${subcommand}\n\nRun 'engram --help' for available commands.\nDid you mean: install, uninstall, status, config, mcp, consolidate, inspect, re-embed?\n`);
+        console.error(`Unknown command: ${subcommand}\n\nRun 'engram --help' for available commands.\nDid you mean: install, uninstall, status, config, mcp, consolidate, inspect, re-embed, ingest?\n`);
         process.exit(1);
         break;
       }
