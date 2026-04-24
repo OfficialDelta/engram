@@ -56,7 +56,7 @@ import { processPostToolUse } from '../adapters/claude-code/post-tool-use.js';
 import { processSessionStart } from '../adapters/claude-code/session-start.js';
 import { extractEntryPoints } from '../adapters/claude-code/user-prompt-submit.js';
 import { processStop } from '../adapters/claude-code/stop.js';
-import { classifyToolCall, buildTurnCompleteEvent, appendEvent } from '../core/event-stream.js';
+import { classifyToolCall, buildTurnCompleteEvent, appendEvent, getSessionEvents } from '../core/event-stream.js';
 import { getFileAnnotations } from '../core/involuntary.js';
 import { findUnconsolidatedSessions, spawnConsolidation } from '../core/consolidation.js';
 import { runMaintenance } from '../core/maintenance.js';
@@ -116,6 +116,15 @@ describe('project-identity', () => {
       for (const sub of ['events', 'sessions', 'episodes', 'logs']) {
         expect(fs.existsSync(path.join(dataDir, sub))).toBe(true);
       }
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('ensureDataDirs creates metrics directory', () => {
+    const dataDir = ensureDataDirs(tmpDir);
+    try {
+      expect(fs.existsSync(path.join(dataDir, 'metrics'))).toBe(true);
     } finally {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }
@@ -355,6 +364,84 @@ describe('PostToolUse handler', () => {
 
     const state = loadSessionState(dir, 'sess-1');
     expect(state.pendingContradictions).toEqual([]);
+  });
+
+  it('logs metrics on 10th tool call', () => {
+    const event: FileReadEvent = {
+      type: 'file_read', filePath: '/src/foo.ts',
+      sessionId: 'sess-metrics', timestamp: new Date().toISOString(),
+    };
+    vi.mocked(classifyToolCall).mockReturnValueOnce(event);
+    vi.mocked(getSessionEvents).mockReturnValueOnce([
+      { type: 'file_read', filePath: '/src/a.ts', sessionId: 'sess-metrics', timestamp: new Date().toISOString() },
+      { type: 'file_write', filePath: '/src/b.ts', sessionId: 'sess-metrics', timestamp: new Date().toISOString(), linesChanged: 5, evidenceSnippet: '' },
+    ] as any);
+
+    saveSessionState(dir, 'sess-metrics', { ...defaultState(), toolCallCount: 9 });
+    fs.mkdirSync(path.join(dir, 'metrics'), { recursive: true });
+
+    processPostToolUse(
+      { tool_name: 'Read', tool_input: { file_path: '/src/foo.ts' }, session_id: 'sess-metrics' },
+      dir, path.join(dir, 'engram.db'),
+    );
+
+    const metricsFile = path.join(dir, 'metrics', 'sess-metrics.metrics.jsonl');
+    expect(fs.existsSync(metricsFile)).toBe(true);
+    const line = fs.readFileSync(metricsFile, 'utf-8').trim();
+    const parsed = JSON.parse(line);
+    expect(parsed.sessionId).toBe('sess-metrics');
+    expect(parsed).toHaveProperty('progressVelocity');
+    expect(parsed).toHaveProperty('searchToActRatio');
+    expect(parsed).toHaveProperty('errorRepetition');
+  });
+
+  it('does not log metrics before 10th tool call', () => {
+    const event: FileReadEvent = {
+      type: 'file_read', filePath: '/src/foo.ts',
+      sessionId: 'sess-early', timestamp: new Date().toISOString(),
+    };
+    vi.mocked(classifyToolCall).mockReturnValueOnce(event);
+
+    saveSessionState(dir, 'sess-early', { ...defaultState(), toolCallCount: 7 });
+
+    processPostToolUse(
+      { tool_name: 'Read', tool_input: { file_path: '/src/foo.ts' }, session_id: 'sess-early' },
+      dir, path.join(dir, 'engram.db'),
+    );
+
+    const metricsFile = path.join(dir, 'metrics', 'sess-early.metrics.jsonl');
+    expect(fs.existsSync(metricsFile)).toBe(false);
+  });
+
+  it('metrics logging failure does not crash hook', () => {
+    const event: FileReadEvent = {
+      type: 'file_read', filePath: '/src/foo.ts',
+      sessionId: 'sess-fail', timestamp: new Date().toISOString(),
+    };
+    vi.mocked(classifyToolCall).mockReturnValueOnce(event);
+    vi.mocked(getSessionEvents).mockReturnValueOnce([]);
+
+    saveSessionState(dir, 'sess-fail', { ...defaultState(), toolCallCount: 9 });
+
+    const origAppend = fs.appendFileSync;
+    vi.spyOn(fs, 'appendFileSync').mockImplementation((...args: any[]) => {
+      const filePath = String(args[0]);
+      if (filePath.includes('.metrics.jsonl')) {
+        throw new Error('disk full');
+      }
+      return origAppend.apply(fs, args as any);
+    });
+
+    try {
+      expect(() =>
+        processPostToolUse(
+          { tool_name: 'Read', tool_input: { file_path: '/src/foo.ts' }, session_id: 'sess-fail' },
+          dir, path.join(dir, 'engram.db'),
+        ),
+      ).not.toThrow();
+    } finally {
+      vi.mocked(fs.appendFileSync).mockRestore();
+    }
   });
 });
 

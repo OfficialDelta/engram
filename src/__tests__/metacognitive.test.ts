@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   progressVelocity,
   searchToActRatio,
   errorRepetition,
   computeMetrics,
+  appendMetrics,
 } from '../core/metacognitive.js';
 import type { EngramEvent } from '../types.js';
 
@@ -155,5 +159,59 @@ describe('computeMetrics', () => {
     expect(result.searchToActRatio.reads).toBe(1);
     expect(result.searchToActRatio.writes).toBe(1);
     expect(result.errorRepetition.repeatedErrors).toHaveLength(0);
+  });
+});
+
+describe('appendMetrics', () => {
+  let tmpDir: string;
+
+  afterEach(() => {
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates metrics dir and writes valid JSONL', () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-metrics-'));
+    const events: EngramEvent[] = [
+      makeEvent('file_write', { filePath: '/src/a.ts', linesChanged: 1, evidenceSnippet: '' }),
+      makeEvent('file_read', { filePath: '/src/b.ts' }),
+    ];
+    const metrics = computeMetrics(events);
+    appendMetrics('sess-1', metrics, tmpDir);
+
+    const filePath = path.join(tmpDir, 'metrics', 'sess-1.metrics.jsonl');
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    const line = fs.readFileSync(filePath, 'utf-8').trim();
+    const parsed = JSON.parse(line);
+    expect(parsed.sessionId).toBe('sess-1');
+    expect(parsed.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(parsed).toHaveProperty('progressVelocity');
+    expect(parsed).toHaveProperty('searchToActRatio');
+    expect(parsed).toHaveProperty('errorRepetition');
+  });
+
+  it('appends multiple lines', () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-metrics-'));
+    const metrics = computeMetrics([]);
+    appendMetrics('sess-2', metrics, tmpDir);
+    appendMetrics('sess-2', metrics, tmpDir);
+
+    const filePath = path.join(tmpDir, 'metrics', 'sess-2.metrics.jsonl');
+    const lines = fs.readFileSync(filePath, 'utf-8').trim().split('\n');
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0]!).sessionId).toBe('sess-2');
+    expect(JSON.parse(lines[1]!).sessionId).toBe('sess-2');
+  });
+
+  it('does not throw when appendFileSync fails', () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-metrics-'));
+    vi.spyOn(fs, 'appendFileSync').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    try {
+      expect(() => appendMetrics('sess-3', computeMetrics([]), tmpDir)).not.toThrow();
+    } finally {
+      vi.mocked(fs.appendFileSync).mockRestore();
+    }
   });
 });
