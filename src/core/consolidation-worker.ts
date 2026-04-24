@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { consolidateSession } from './consolidation.js';
+import { consolidateSession, readConsolidationTimestamp, writeConsolidationTimestamp } from './consolidation.js';
 import { loadConfig } from './config.js';
 
 const sessionId = process.argv[2];
@@ -23,6 +23,7 @@ if (cfg.llm.apiKey && !process.env.ANTHROPIC_API_KEY) {
 }
 
 try {
+  const sinceTimestamp = readConsolidationTimestamp(dataDir, sessionId);
   const consolidationConfig = {
     ...(cfg.llm.pass1Model ? { pass1Model: cfg.llm.pass1Model } : {}),
     ...(cfg.llm.pass2Model ? { pass2Model: cfg.llm.pass2Model } : {}),
@@ -36,8 +37,10 @@ try {
           },
         }
       : {}),
+    ...(sinceTimestamp ? { sinceTimestamp } : {}),
   };
   await consolidateSession(sessionId, dbPath, dataDir, consolidationConfig);
+  writeConsolidationTimestamp(dataDir, sessionId, new Date().toISOString());
   fs.writeFileSync(logPath, `[${new Date().toISOString()}] Consolidation completed for session ${sessionId}\n`);
   process.exit(0);
 } catch (err) {

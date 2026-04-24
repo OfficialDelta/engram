@@ -368,7 +368,10 @@ export async function consolidateSession(
   const client = (config?.client as Parameters<typeof pass1Summarize>[1]) ??
     new (await import('@anthropic-ai/sdk')).default();
 
-  const events = getSessionEvents(sessionId, dataDir);
+  let events = getSessionEvents(sessionId, dataDir);
+  if (config?.sinceTimestamp) {
+    events = events.filter((e) => e.timestamp > config.sinceTimestamp!);
+  }
   if (events.length === 0) return;
 
   const embeddingProvider = config?.embeddingConfig?.provider ?? 'voyage-3-lite';
@@ -401,6 +404,30 @@ export async function consolidateSession(
     );
   } finally {
     db.close();
+  }
+}
+
+export function readConsolidationTimestamp(dataDir: string, sessionId: string): string | null {
+  const markerPath = path.join(dataDir, 'sessions', `${sessionId}.last-consolidated-at.json`);
+  try {
+    const raw = fs.readFileSync(markerPath, 'utf-8');
+    const parsed = JSON.parse(raw) as { timestamp?: string };
+    return parsed.timestamp ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeConsolidationTimestamp(dataDir: string, sessionId: string, timestamp: string): void {
+  const sessionsDir = path.join(dataDir, 'sessions');
+  try {
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sessionsDir, `${sessionId}.last-consolidated-at.json`),
+      JSON.stringify({ timestamp }),
+    );
+  } catch {
+    // swallow — P004: timestamp write failure must not block consolidation
   }
 }
 

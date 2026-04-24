@@ -203,6 +203,7 @@ export type ConsolidationConfig = {
   windowSize?: number;
   windowOverlap?: number;
   embeddingConfig?: { provider?: string; apiKey?: string };
+  sinceTimestamp?: string;
 };
 
 export type EntryPoint = {
