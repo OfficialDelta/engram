@@ -62,7 +62,7 @@ vi.mock('../core/retrieval.js', () => ({
   spreadingActivation: vi.fn(() => ({ tier1: [], tier2: [], tier3: [] })),
 }));
 
-describe('processStop API key validation', () => {
+describe('processPostCompact API key validation', () => {
   const originalEnv = process.env.ANTHROPIC_API_KEY;
 
   beforeEach(() => {
@@ -87,17 +87,11 @@ describe('processStop API key validation', () => {
     });
 
     const { spawnConsolidation } = await import('../core/consolidation.js');
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { processPostCompact } = await import('../adapters/claude-code/post-compact.js');
 
-    const { processStop } = await import('../adapters/claude-code/stop.js');
-    processStop('sess-1', tmpDir, path.join(tmpDir, 'engram.db'));
+    processPostCompact('sess-1', tmpDir, path.join(tmpDir, 'engram.db'));
 
     expect(spawnConsolidation).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Consolidation skipped: no API key configured'),
-    );
-
-    consoleSpy.mockRestore();
   });
 
   it('spawns consolidation when config has API key', async () => {
@@ -109,9 +103,9 @@ describe('processStop API key validation', () => {
     });
 
     const { spawnConsolidation } = await import('../core/consolidation.js');
-    const { processStop } = await import('../adapters/claude-code/stop.js');
+    const { processPostCompact } = await import('../adapters/claude-code/post-compact.js');
 
-    processStop('sess-1', tmpDir, path.join(tmpDir, 'engram.db'));
+    processPostCompact('sess-1', tmpDir, path.join(tmpDir, 'engram.db'));
 
     expect(spawnConsolidation).toHaveBeenCalled();
   });
@@ -127,9 +121,9 @@ describe('processStop API key validation', () => {
     });
 
     const { spawnConsolidation } = await import('../core/consolidation.js');
-    const { processStop } = await import('../adapters/claude-code/stop.js');
+    const { processPostCompact } = await import('../adapters/claude-code/post-compact.js');
 
-    processStop('sess-1', tmpDir, path.join(tmpDir, 'engram.db'));
+    processPostCompact('sess-1', tmpDir, path.join(tmpDir, 'engram.db'));
 
     expect(spawnConsolidation).toHaveBeenCalled();
   });

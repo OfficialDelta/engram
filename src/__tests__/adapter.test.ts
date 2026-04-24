@@ -457,4 +457,12 @@ describe('Stop handler', () => {
     expect(buildTurnCompleteEvent).toHaveBeenCalledWith('sess-1', 5, 3);
     expect(appendEvent).toHaveBeenCalled();
   });
+
+  it('does not call spawnConsolidation', () => {
+    saveSessionState(dir, 'sess-1', { ...defaultState(), turnCount: 5, toolCallCount: 10 });
+
+    processStop('sess-1', dir, path.join(dir, 'engram.db'));
+
+    expect(spawnConsolidation).not.toHaveBeenCalled();
+  });
 });
