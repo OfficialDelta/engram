@@ -49,6 +49,14 @@ describe('engram inspect --help', () => {
   });
 });
 
+describe('engram re-embed --help', () => {
+  it('prints usage text for re-embed', () => {
+    const { stdout, exitCode } = run('re-embed', '--help');
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Usage: engram re-embed');
+  });
+});
+
 describe('unknown command suggests alternatives', () => {
   it('prints suggestion and exits with code 1', () => {
     const { stderr, exitCode } = run('boguscmd');
@@ -58,6 +66,7 @@ describe('unknown command suggests alternatives', () => {
     expect(stderr).toContain('Did you mean:');
     expect(stderr).toContain('consolidate');
     expect(stderr).toContain('inspect');
+    expect(stderr).toContain('re-embed');
   });
 });
 
