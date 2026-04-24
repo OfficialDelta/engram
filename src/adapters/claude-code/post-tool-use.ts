@@ -100,7 +100,7 @@ export function processPostToolUse(
   const additionalContext = buildContext(
     pendingContradictions,
     annotations,
-    { high: [], medium: [], low: [] },
+    { high: [], medium: [] },
   );
 
   saveSessionState(dataDir, rawToolCall.session_id, state);

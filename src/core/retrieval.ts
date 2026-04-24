@@ -6,9 +6,9 @@ type Database = BetterSqlite3.Database;
 
 const DEFAULT_CONFIG = {
   decayFactor: 0.6,
-  activationThreshold: 0.1,
+  activationThreshold: 0.3,
   maxDepth: 5,
-  tierBoundaries: { high: 0.7, medium: 0.3 },
+  tierBoundaries: { high: 0.5, medium: 0.3 },
 } as const;
 
 function resolveEntryPoints(db: Database, entryPoints: EntryPoint[]): GraphNode[] {
@@ -88,7 +88,6 @@ export function spreadingActivation(
 
   const high: NodeResult[] = [];
   const medium: NodeResult[] = [];
-  const low: NodeResult[] = [];
 
   for (const [nodeId, activation] of activationMap) {
     if (entryNodeIds.has(nodeId)) continue;
@@ -103,10 +102,8 @@ export function spreadingActivation(
       high.push(result);
     } else if (activation >= tierBoundaries.medium) {
       medium.push(result);
-    } else {
-      low.push(result);
     }
   }
 
-  return { high, medium, low };
+  return { high, medium };
 }

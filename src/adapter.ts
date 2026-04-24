@@ -86,7 +86,7 @@ export function onToolCall(session: AdapterSession, toolCall: RawToolCall): Tool
   const context = buildContext(
     pendingContradictions,
     annotations,
-    { high: [], medium: [], low: [] },
+    { high: [], medium: [] },
   );
 
   saveSessionState(dataDir, sessionId, state);

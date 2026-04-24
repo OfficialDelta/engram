@@ -42,16 +42,14 @@ describe('spreadingActivation', () => {
 
     const results = spreadingActivation(db, [{ type: 'node', value: a.id }]);
 
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
     const bResult = all.find(r => r.node.id === b.id);
-    const cResult = all.find(r => r.node.id === c.id);
 
     expect(bResult).toBeDefined();
-    expect(cResult).toBeDefined();
-    // B: 1.0 * 0.6 * 0.8 = 0.48
+    // B: 1.0 * 0.6 * 0.8 = 0.48 → medium (0.3-0.5)
     expect(bResult!.activation).toBeCloseTo(0.48, 10);
-    // C: 0.48 * 0.6 * 0.9 = 0.2592
-    expect(cResult!.activation).toBeCloseTo(0.2592, 10);
+    // C: 0.48 * 0.6 * 0.9 = 0.2592 → below 0.3 threshold, excluded
+    expect(all.find(r => r.node.id === c.id)).toBeUndefined();
 
     db.close();
   });
@@ -66,7 +64,7 @@ describe('spreadingActivation', () => {
     link(db, b.id, c.id, 1.0);
 
     const results = spreadingActivation(db, [{ type: 'node', value: a.id }]);
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
 
     expect(all.find(r => r.node.id === b.id)).toBeUndefined();
     expect(all.find(r => r.node.id === c.id)).toBeUndefined();
@@ -79,15 +77,10 @@ describe('spreadingActivation', () => {
     const seed = makeNode(db, { name: 'seed', strength: 1.0 });
     const highNode = makeNode(db, { name: 'high-node', strength: 1.0 });
     const medNode = makeNode(db, { name: 'med-node', strength: 1.0 });
-    const lowNode = makeNode(db, { name: 'low-node', strength: 1.0 });
 
-    // high: activation > 0.7 → need parentAct * 0.6 * weight > 0.7
-    // 1.0 * 0.6 * 1.0 = 0.6 → not > 0.7. Use strength 1.5 seed:
-    // Actually, let's use custom config to make tiers easier to hit.
     // With decayFactor=1.0: activation = seed.strength * 1.0 * weight
-    link(db, seed.id, highNode.id, 0.9);  // 1.0 * 1.0 * 0.9 = 0.9 → high (>0.7)
-    link(db, seed.id, medNode.id, 0.5);   // 1.0 * 1.0 * 0.5 = 0.5 → medium (0.3-0.7)
-    link(db, seed.id, lowNode.id, 0.15);  // 1.0 * 1.0 * 0.15 = 0.15 → low (0.1-0.3)
+    link(db, seed.id, highNode.id, 0.9);  // 1.0 * 1.0 * 0.9 = 0.9 → high (>0.5)
+    link(db, seed.id, medNode.id, 0.5);   // 1.0 * 1.0 * 0.5 = 0.5 → medium (0.3-0.5, not >0.5)
 
     const results = spreadingActivation(
       db,
@@ -97,7 +90,6 @@ describe('spreadingActivation', () => {
 
     expect(results.high.map(r => r.node.name)).toEqual(['high-node']);
     expect(results.medium.map(r => r.node.name)).toEqual(['med-node']);
-    expect(results.low.map(r => r.node.name)).toEqual(['low-node']);
 
     db.close();
   });
@@ -111,7 +103,7 @@ describe('spreadingActivation', () => {
     // B activation = 1.0 * 0.6 * 0.1 = 0.06 < 0.1 threshold
 
     const results = spreadingActivation(db, [{ type: 'node', value: a.id }]);
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
 
     expect(all).toHaveLength(0);
 
@@ -126,7 +118,7 @@ describe('spreadingActivation', () => {
     link(db, fileNode.id, neighbor.id, 1.0);
 
     const results = spreadingActivation(db, [{ type: 'file', value: 'src/main.ts' }]);
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
 
     expect(all.find(r => r.node.id === neighbor.id)).toBeDefined();
     expect(all.find(r => r.node.id === fileNode.id)).toBeUndefined();
@@ -142,7 +134,7 @@ describe('spreadingActivation', () => {
     link(db, named.id, neighbor.id, 1.0);
 
     const results = spreadingActivation(db, [{ type: 'name', value: 'some-concept' }]);
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
 
     expect(all.find(r => r.node.id === neighbor.id)).toBeDefined();
     expect(all.find(r => r.node.id === named.id)).toBeUndefined();
@@ -164,7 +156,7 @@ describe('spreadingActivation', () => {
       { type: 'node', value: s2.id },
     ]);
 
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
     const targetResult = all.find(r => r.node.id === target.id);
 
     expect(targetResult).toBeDefined();
@@ -180,10 +172,10 @@ describe('spreadingActivation', () => {
     const weak = makeNode(db, { name: 'weak', strength: 1.0 });
 
     link(db, seed.id, strong.id, 0.9);
-    link(db, seed.id, weak.id, 0.4);
+    link(db, seed.id, weak.id, 0.6);
 
     const results = spreadingActivation(db, [{ type: 'node', value: seed.id }]);
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
 
     const strongResult = all.find(r => r.node.id === strong.id);
     const weakResult = all.find(r => r.node.id === weak.id);
@@ -191,10 +183,10 @@ describe('spreadingActivation', () => {
     expect(strongResult).toBeDefined();
     expect(weakResult).toBeDefined();
     expect(strongResult!.activation).toBeGreaterThan(weakResult!.activation);
-    // strong: 1.0 * 0.6 * 0.9 = 0.54
-    // weak: 1.0 * 0.6 * 0.4 = 0.24
+    // strong: 1.0 * 0.6 * 0.9 = 0.54 → high (>0.5)
+    // weak: 1.0 * 0.6 * 0.6 = 0.36 → medium (0.3-0.5)
     expect(strongResult!.activation).toBeCloseTo(0.54, 10);
-    expect(weakResult!.activation).toBeCloseTo(0.24, 10);
+    expect(weakResult!.activation).toBeCloseTo(0.36, 10);
 
     db.close();
   });
@@ -207,7 +199,7 @@ describe('spreadingActivation', () => {
     link(db, named.id, neighbor.id, 1.0);
 
     const results = spreadingActivation(db, [{ type: 'name', value: 'Express' }]);
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
 
     expect(all.find(r => r.node.id === neighbor.id)).toBeDefined();
 
@@ -225,7 +217,7 @@ describe('spreadingActivation', () => {
     link(db, fuzzy.id, fuzzyNeighbor.id, 1.0);
 
     const results = spreadingActivation(db, [{ type: 'name', value: 'Express' }]);
-    const all = [...results.high, ...results.medium, ...results.low];
+    const all = [...results.high, ...results.medium];
 
     expect(all.find(r => r.node.id === exactNeighbor.id)).toBeDefined();
     expect(all.find(r => r.node.id === fuzzyNeighbor.id)).toBeUndefined();

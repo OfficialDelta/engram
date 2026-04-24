@@ -22,7 +22,7 @@ vi.mock('../core/involuntary.js', () => ({
 }));
 
 vi.mock('../core/retrieval.js', () => ({
-  spreadingActivation: vi.fn(() => ({ high: [], medium: [], low: [] })),
+  spreadingActivation: vi.fn(() => ({ high: [], medium: [] })),
 }));
 
 vi.mock('../core/consolidation.js', () => ({
@@ -201,7 +201,7 @@ describe('context-builder', () => {
     node: makeNode(name, desc), activation,
   });
 
-  const emptyTiered: TieredResults = { high: [], medium: [], low: [] };
+  const emptyTiered: TieredResults = { high: [], medium: [] };
 
   it('returns empty string with empty inputs', () => {
     expect(buildContext([], [], emptyTiered)).toBe('');
@@ -225,7 +225,6 @@ describe('context-builder', () => {
     const tiered: TieredResults = {
       high: [makeNodeResult('HighNode', 'high desc', 0.9)],
       medium: [makeNodeResult('MedNode', 'med desc', 0.5)],
-      low: [makeNodeResult('LowNode', 'low desc', 0.1)],
     };
     const result = buildContext(
       [makeContradiction()],
@@ -238,7 +237,6 @@ describe('context-builder', () => {
       result.indexOf('Related knowledge'),
       result.indexOf('HighNode'),
       result.indexOf('MedNode'),
-      result.indexOf('LowNode'),
     ];
     for (let i = 0; i < positions.length - 1; i++) {
       expect(positions[i]).toBeLessThan(positions[i + 1]!);
@@ -250,7 +248,7 @@ describe('context-builder', () => {
     const annotation = makeAnnotation('Auth', 'desc');
     const tiered: TieredResults = {
       high: [makeNodeResult('VeryLongNodeName', 'x'.repeat(200), 0.9)],
-      medium: [], low: [],
+      medium: [],
     };
 
     const baseResult = buildContext([contradiction], [annotation], emptyTiered);
@@ -265,7 +263,7 @@ describe('context-builder', () => {
     expect(buildContext(
       [makeContradiction()],
       [makeAnnotation('A', 'b')],
-      { high: [makeNodeResult('N', 'd', 0.9)], medium: [], low: [] },
+      { high: [makeNodeResult('N', 'd', 0.9)], medium: [] },
       0,
     )).toBe('');
   });

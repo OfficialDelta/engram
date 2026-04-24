@@ -138,7 +138,7 @@ describe('Full Circuit: Events → Consolidation → Graph → Retrieval → Con
     // Spreading activation from auth file — entry point is auth-middleware,
     // bcrypt-hashing should appear via edge traversal (excluded as entry point per L009)
     const tieredResults = spreadingActivation(db, [{ type: 'file', value: 'src/auth.ts' }]);
-    const allResults = [...tieredResults.high, ...tieredResults.medium, ...tieredResults.low];
+    const allResults = [...tieredResults.high, ...tieredResults.medium];
     expect(allResults.length).toBeGreaterThanOrEqual(1);
     const resultNames = allResults.map(r => r.node.name);
     expect(resultNames).toContain('bcrypt-hashing');
@@ -262,7 +262,7 @@ describe('Full Pipeline End-to-End', () => {
 
     // Step 4: Spreading activation from auth file
     const tieredResults = spreadingActivation(db, [{ type: 'file', value: 'src/auth.ts' }]);
-    const allResults = [...tieredResults.high, ...tieredResults.medium, ...tieredResults.low];
+    const allResults = [...tieredResults.high, ...tieredResults.medium];
     expect(allResults.length).toBeGreaterThanOrEqual(1);
     expect(allResults.map(r => r.node.name)).toContain('bcrypt-hashing');
 

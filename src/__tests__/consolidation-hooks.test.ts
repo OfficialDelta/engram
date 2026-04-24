@@ -310,7 +310,7 @@ describe('HOOK_EVENTS registration', () => {
       path.resolve(import.meta.dirname ?? '.', '..', 'cli', 'install.ts'),
       'utf-8',
     );
-    const hookBlock = installSource.match(/const HOOK_EVENTS\s*=\s*\{([^}]+)\}/s);
+    const hookBlock = installSource.match(/const HOOK_EVENTS\s*=\s*\{([\s\S]+?)\}\s*as\s+const/);
     expect(hookBlock).not.toBeNull();
 
     const entries = hookBlock![1]!.split('\n').filter((line) => line.includes('handler:'));

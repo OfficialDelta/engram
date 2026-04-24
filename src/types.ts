@@ -226,7 +226,6 @@ export type NodeResult = {
 export type TieredResults = {
   high: NodeResult[];
   medium: NodeResult[];
-  low: NodeResult[];
 };
 
 export type Annotation = {

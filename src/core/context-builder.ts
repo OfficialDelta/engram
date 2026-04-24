@@ -69,8 +69,5 @@ export function buildContext(
   remaining = updated.remaining;
   if (remaining <= 0) return result;
 
-  updated = appendTiered(result, remaining, tieredResults.low, 'name-only');
-  result = updated.buf;
-
   return result;
 }
