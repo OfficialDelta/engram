@@ -4,6 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type {
   EngramEvent,
+  TurnCompleteEvent,
   WindowSummary,
   StructuredEpisode,
   GraphChangeRequest,
@@ -44,7 +45,7 @@ export async function pass1Summarize(
     windows.map(async (windowEvts, idx) => {
       const response = await client.messages.create({
         model,
-        max_tokens: 300,
+        max_tokens: 500,
         messages: [
           {
             role: 'user',
@@ -57,7 +58,13 @@ Return a JSON object with these fields:
 - summary: what the agent was doing and what happened (2-3 sentences with causal links)
 - filesModified: array of file paths modified in these events
 - decisionsIdentified: array of decision descriptions (empty array if none)
-- outcome: one of "progress", "debugging", "blocked", "completed"`,
+- outcome: one of "progress", "debugging", "blocked", "completed"
+
+Additional extraction requirements:
+- List specific bugs encountered with their error messages or stack traces verbatim
+- Include concrete values: config settings, thresholds, version numbers, counts
+- For each file modified, describe WHAT specifically changed (not just that it was modified)
+- Quote the agent's stated reasons for actions verbatim when available in evidence_snippet fields`,
           },
         ],
       });
@@ -117,6 +124,10 @@ Decision extraction guidance:
 - For implicit decisions: set isImplicit=true, infer the rationale from context. Only flag as a decision when alternatives were clearly available — routine code changes are not decisions. Set causallyImportant=false.
 - Each decision node should have nodeType='decision' and a descriptive name summarizing the choice made.
 - Include affected file paths in affectedFiles for every decision node.
+
+Rationale formatting:
+- For explicit decisions (isImplicit=false): include the agent's stated reason verbatim, without modification or hedging.
+- For implicit decisions (isImplicit=true): prefix the inferred rationale with "[inferred]" so downstream consumers can distinguish stated from inferred reasoning.
 
 ${summaryText}`,
       },
@@ -354,6 +365,71 @@ export async function applyGraphChanges(
   return nodeIdMap;
 }
 
+export function shouldUseDiscussionConsolidation(events: EngramEvent[]): boolean {
+  return (
+    events.length > 0 &&
+    events.length < 3 &&
+    events.every(
+      (e) => e.type === 'turn_complete' && (e as TurnCompleteEvent).toolCallCount === 0,
+    )
+  );
+}
+
+export async function discussionConsolidate(
+  events: EngramEvent[],
+  client: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> } },
+  model: string,
+): Promise<{ topics: string[]; decisions: string[]; constraints: string[] }> {
+  const turnEvents = events.filter((e): e is TurnCompleteEvent => e.type === 'turn_complete');
+  const eventSummary = turnEvents
+    .map((e, i) => {
+      const parts = [`Turn ${i + 1}`];
+      if (e.userMessage) parts.push(`User: ${e.userMessage}`);
+      if (e.agentSummary) parts.push(`Agent: ${e.agentSummary}`);
+      return parts.join('\n');
+    })
+    .join('\n\n');
+
+  try {
+    const response = await client.messages.create({
+      model,
+      max_tokens: 300,
+      messages: [
+        {
+          role: 'user',
+          content: `Analyze this discussion session and extract structured information.
+
+Discussion turns:
+${eventSummary}
+
+Return a JSON object with:
+- topics: array of topics discussed
+- decisions: array of decisions stated during the discussion
+- constraints: array of constraints or requirements mentioned`,
+        },
+      ],
+    });
+
+    const rawText = response.content[0]?.text ?? '';
+    try {
+      const parsed = JSON.parse(rawText) as {
+        topics?: string[];
+        decisions?: string[];
+        constraints?: string[];
+      };
+      return {
+        topics: parsed.topics ?? [],
+        decisions: parsed.decisions ?? [],
+        constraints: parsed.constraints ?? [],
+      };
+    } catch {
+      return { topics: [], decisions: [], constraints: [] };
+    }
+  } catch {
+    return { topics: [], decisions: [], constraints: [] };
+  }
+}
+
 export async function consolidateSession(
   sessionId: string,
   dbPath: string,
@@ -373,6 +449,30 @@ export async function consolidateSession(
     events = events.filter((e) => e.timestamp > config.sinceTimestamp!);
   }
   if (events.length === 0) return;
+
+  if (shouldUseDiscussionConsolidation(events)) {
+    const discussionModel = 'claude-haiku-4-5';
+    const result = await discussionConsolidate(events, client, discussionModel);
+    const embProv = config?.embeddingConfig?.provider ?? 'voyage-3-lite';
+    const db = initializeSchema(dbPath, getDimensions(embProv), embProv);
+    try {
+      const episodeRecord = createEpisode(db, {
+        sessionId,
+        summary: `Discussion: ${result.topics.join(', ')}`,
+        nodesInvolved: [],
+        timestamp: new Date().toISOString(),
+        metadata: result as unknown as Record<string, unknown>,
+      });
+      fs.mkdirSync(path.join(dataDir, 'episodes'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dataDir, 'episodes', sessionId + '.episode.json'),
+        JSON.stringify({ episodeId: episodeRecord.id, completedAt: new Date().toISOString(), type: 'discussion' }),
+      );
+    } finally {
+      db.close();
+    }
+    return;
+  }
 
   const embeddingProvider = config?.embeddingConfig?.provider ?? 'voyage-3-lite';
   const db = initializeSchema(dbPath, getDimensions(embeddingProvider), embeddingProvider);
