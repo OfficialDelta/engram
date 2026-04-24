@@ -48,25 +48,57 @@ function renderNodeEntry(nr: NodeResult, tier: 'high' | 'medium'): string {
   return `- [medium] ${nr.node.name}${sessions}\n  ${summary}\n`;
 }
 
+const CROSS_CUTTING_THRESHOLD = 3;
+
+function isCrossCuttingDecision(nr: NodeResult): boolean {
+  return nr.node.nodeType === 'decision' && nr.node.affectedFiles.length >= CROSS_CUTTING_THRESHOLD;
+}
+
 function renderGrouped(
   tieredResults: TieredResults,
   remaining: number,
 ): string {
+  const crossCuttingHigh = tieredResults.high.filter(isCrossCuttingDecision);
+  const crossCuttingMed = tieredResults.medium.filter(isCrossCuttingDecision);
+  const remainderHigh = tieredResults.high.filter(nr => !isCrossCuttingDecision(nr));
+  const remainderMed = tieredResults.medium.filter(nr => !isCrossCuttingDecision(nr));
+
+  let buf = '';
+
+  if (crossCuttingHigh.length > 0 || crossCuttingMed.length > 0) {
+    const header = '## Project-wide decisions\n';
+    if (header.length <= remaining) {
+      buf += header;
+      remaining -= header.length;
+      for (const nr of crossCuttingHigh) {
+        const entry = renderNodeEntry(nr, 'high');
+        if (entry.length > remaining) break;
+        buf += entry;
+        remaining -= entry.length;
+      }
+      for (const nr of crossCuttingMed) {
+        const entry = renderNodeEntry(nr, 'medium');
+        if (entry.length > remaining) break;
+        buf += entry;
+        remaining -= entry.length;
+      }
+    }
+  }
+
   const highByType = new Map<GraphNode['nodeType'], NodeResult[]>();
   const medByType = new Map<GraphNode['nodeType'], NodeResult[]>();
 
-  for (const nr of tieredResults.high) {
+  for (const nr of remainderHigh) {
     const list = highByType.get(nr.node.nodeType) ?? [];
     list.push(nr);
     highByType.set(nr.node.nodeType, list);
   }
-  for (const nr of tieredResults.medium) {
+  for (const nr of remainderMed) {
     const list = medByType.get(nr.node.nodeType) ?? [];
     list.push(nr);
     medByType.set(nr.node.nodeType, list);
   }
 
-  let buf = '';
   for (const group of GROUP_ORDER) {
     const highNodes = highByType.get(group.type) ?? [];
     const medNodes = medByType.get(group.type) ?? [];

@@ -199,4 +199,156 @@ describe('context-builder', () => {
       0,
     )).toBe('');
   });
+
+  describe('cross-cutting decisions', () => {
+    it('renders cross-cutting decisions in Project-wide decisions section', () => {
+      const tiered: TieredResults = {
+        high: [makeResult(0.9, {
+          name: 'CrossDec',
+          nodeType: 'decision',
+          affectedFiles: ['a.ts', 'b.ts', 'c.ts'],
+        })],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      expect(result).toContain('## Project-wide decisions');
+      expect(result).toContain('CrossDec');
+    });
+
+    it('does not render cross-cutting decisions in Decisions group', () => {
+      const tiered: TieredResults = {
+        high: [makeResult(0.9, {
+          name: 'CrossDec',
+          nodeType: 'decision',
+          affectedFiles: ['a.ts', 'b.ts', 'c.ts'],
+        })],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      expect(result).not.toContain('## Decisions');
+    });
+
+    it('renders non-cross-cutting decisions in Decisions group normally', () => {
+      const tiered: TieredResults = {
+        high: [makeResult(0.9, {
+          name: 'LocalDec',
+          nodeType: 'decision',
+          affectedFiles: ['a.ts'],
+        })],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      expect(result).toContain('## Decisions');
+      expect(result).toContain('LocalDec');
+      expect(result).not.toContain('## Project-wide decisions');
+    });
+
+    it('splits decisions correctly when both cross-cutting and non-cross-cutting exist', () => {
+      const tiered: TieredResults = {
+        high: [
+          makeResult(0.9, {
+            id: 'cross', name: 'CrossDec', nodeType: 'decision',
+            affectedFiles: ['a.ts', 'b.ts', 'c.ts'],
+          }),
+          makeResult(0.8, {
+            id: 'local', name: 'LocalDec', nodeType: 'decision',
+            affectedFiles: ['x.ts'],
+          }),
+        ],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      expect(result).toContain('## Project-wide decisions');
+      expect(result).toContain('## Decisions');
+      const pwdSection = result.slice(
+        result.indexOf('## Project-wide decisions'),
+        result.indexOf('## Decisions'),
+      );
+      expect(pwdSection).toContain('CrossDec');
+      expect(pwdSection).not.toContain('LocalDec');
+      const decSection = result.slice(result.indexOf('## Decisions'));
+      expect(decSection).toContain('LocalDec');
+      expect(decSection).not.toContain('CrossDec');
+    });
+
+    it('Project-wide decisions section appears before per-type groups', () => {
+      const tiered: TieredResults = {
+        high: [
+          makeResult(0.9, {
+            id: 'cross', name: 'CrossDec', nodeType: 'decision',
+            affectedFiles: ['a.ts', 'b.ts', 'c.ts'],
+          }),
+          makeResult(0.8, {
+            id: 'local', name: 'LocalDec', nodeType: 'decision',
+            affectedFiles: ['x.ts'],
+          }),
+        ],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      const pwdPos = result.indexOf('## Project-wide decisions');
+      const decPos = result.indexOf('## Decisions');
+      expect(pwdPos).toBeGreaterThan(-1);
+      expect(decPos).toBeGreaterThan(-1);
+      expect(pwdPos).toBeLessThan(decPos);
+    });
+
+    it('non-decision nodes with 3+ affected files stay in their normal group', () => {
+      const tiered: TieredResults = {
+        high: [makeResult(0.9, {
+          name: 'BigPattern',
+          nodeType: 'pattern',
+          affectedFiles: ['a.ts', 'b.ts', 'c.ts', 'd.ts'],
+        })],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      expect(result).toContain('## Findings');
+      expect(result).toContain('BigPattern');
+      expect(result).not.toContain('## Project-wide decisions');
+    });
+
+    it('decision with exactly 2 affected files stays in Decisions (boundary)', () => {
+      const tiered: TieredResults = {
+        high: [makeResult(0.9, {
+          name: 'TwoFileDec',
+          nodeType: 'decision',
+          affectedFiles: ['a.ts', 'b.ts'],
+        })],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      expect(result).toContain('## Decisions');
+      expect(result).toContain('TwoFileDec');
+      expect(result).not.toContain('## Project-wide decisions');
+    });
+
+    it('decision with exactly 3 affected files goes to Project-wide decisions (boundary)', () => {
+      const tiered: TieredResults = {
+        high: [makeResult(0.9, {
+          name: 'ThreeFileDec',
+          nodeType: 'decision',
+          affectedFiles: ['a.ts', 'b.ts', 'c.ts'],
+        })],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      expect(result).toContain('## Project-wide decisions');
+      expect(result).toContain('ThreeFileDec');
+      expect(result).not.toContain('## Decisions');
+    });
+
+    it('omits Project-wide decisions header when no decisions have 3+ files', () => {
+      const tiered: TieredResults = {
+        high: [
+          makeResult(0.9, { name: 'D1', nodeType: 'decision', affectedFiles: ['a.ts'] }),
+          makeResult(0.8, { name: 'D2', nodeType: 'decision', affectedFiles: ['a.ts', 'b.ts'] }),
+        ],
+        medium: [],
+      };
+      const result = buildContext([], [], tiered);
+      expect(result).not.toContain('## Project-wide decisions');
+      expect(result).toContain('## Decisions');
+    });
+  });
 });
