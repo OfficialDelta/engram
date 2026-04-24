@@ -12,7 +12,7 @@ import { findUnconsolidatedSessions, spawnConsolidation } from './core/consolida
 import { extractEntryPoints } from './core/entry-points.js';
 import { runMaintenance } from './core/maintenance.js';
 import { loadConfig, getMaintenanceConfig } from './core/config.js';
-import type { AdapterConfig, AdapterSession, ToolCallResult, RawToolCall, Annotation, FileReadEvent, FileWriteEvent } from './types.js';
+import type { AdapterConfig, AdapterSession, ToolCallResult, RawToolCall, Annotation, FileReadEvent, FileWriteEvent, NodeResult } from './types.js';
 
 const CONSOLIDATION_TURN_THRESHOLD = 5;
 const CONSOLIDATION_EVENT_THRESHOLD = 50;
@@ -148,13 +148,13 @@ export function onPrompt(session: AdapterSession, prompt: string): { context: st
     } catch { injectedIds = []; }
     const seen = new Set(injectedIds);
     const filtered = {
-      high: tieredResults.high.filter((r: any) => !seen.has(r.node.id)),
-      medium: tieredResults.medium.filter((r: any) => !seen.has(r.node.id)),
+      high: tieredResults.high.filter((r: NodeResult) => !seen.has(r.node.id)),
+      medium: tieredResults.medium.filter((r: NodeResult) => !seen.has(r.node.id)),
     };
 
     context = buildContext([], [], filtered);
 
-    const newIds = [...filtered.high, ...filtered.medium].map((r: any) => r.node.id);
+    const newIds = [...filtered.high, ...filtered.medium].map((r: NodeResult) => r.node.id);
     if (newIds.length > 0) {
       try {
         writeFileSync(injectedPath, JSON.stringify([...injectedIds, ...newIds]));
