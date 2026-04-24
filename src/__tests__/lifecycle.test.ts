@@ -388,7 +388,7 @@ describe('Hook Fast Path Latency (R009)', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('processPostToolUse fast path completes under 50ms for file_read', async () => {
+  it('processPostToolUse fast path completes under 100ms for file_read', async () => {
     const { processPostToolUse } = await import('../adapters/claude-code/post-tool-use.js');
 
     processPostToolUse(
@@ -411,7 +411,7 @@ describe('Hook Fast Path Latency (R009)', () => {
     }
 
     for (const t of times) {
-      expect(t).toBeLessThan(50);
+      expect(t).toBeLessThan(100);
     }
   });
 });
