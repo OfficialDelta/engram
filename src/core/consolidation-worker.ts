@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { consolidateSession, readConsolidationTimestamp, writeConsolidationTimestamp, isEpisodeComplete, acquireConsolidationLock, releaseConsolidationLock } from './consolidation.js';
 import { loadConfig } from './config.js';
+import { validateEmbeddingDimension } from './embed.js';
+import { Database } from '../db/migrations.js';
+import * as sqliteVec from 'sqlite-vec';
 
 const sessionId = process.argv[2];
 const dbPath = process.argv[3];
@@ -30,6 +33,31 @@ if (isEpisodeComplete(dataDir, sessionId)) {
 if (!acquireConsolidationLock(dataDir, sessionId)) {
   fs.writeFileSync(logPath, `[${new Date().toISOString()}] Skipped: consolidation lock held for session ${sessionId}\n`);
   process.exit(0);
+}
+
+const embeddingProvider = cfg.embedding.provider || 'voyage-3-lite';
+if (fs.existsSync(dbPath)) {
+  let checkDb;
+  try {
+    checkDb = new Database(dbPath);
+    sqliteVec.load(checkDb);
+    const mismatch = validateEmbeddingDimension(checkDb, embeddingProvider);
+    if (mismatch) {
+      const errorMsg = `Embedding dimension mismatch: DB has ${mismatch.existing}D (${mismatch.existingProvider}), config expects ${mismatch.expected}D (${mismatch.currentProvider}). Run: npx engram re-embed`;
+      fs.writeFileSync(logPath, `[${new Date().toISOString()}] Failed: ${errorMsg}\n`);
+      const episodesDir = path.join(dataDir, 'episodes');
+      fs.mkdirSync(episodesDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(episodesDir, `${sessionId}.failed.json`),
+        JSON.stringify({ error: errorMsg, sessionId, failedAt: new Date().toISOString() }),
+      );
+      releaseConsolidationLock(dataDir, sessionId);
+      checkDb.close();
+      process.exit(1);
+    }
+  } finally {
+    checkDb?.close();
+  }
 }
 
 try {

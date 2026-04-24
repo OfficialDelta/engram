@@ -68,6 +68,7 @@ export function initializeSchema(
   dbPath: string,
   dimension: number = 512,
   provider: string = 'voyage-3-lite',
+  allowRebuild: boolean = false,
 ): BetterSqlite3.Database {
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
@@ -81,6 +82,9 @@ export function initializeSchema(
     const existingDim = row ? parseInt(row.value, 10) : dimension;
 
     if (existingDim !== dimension) {
+      if (!allowRebuild) {
+        throw new Error(`Embedding dimension mismatch: database has ${existingDim}D, config expects ${dimension}D. Run: npx engram re-embed to migrate.`);
+      }
       console.warn(`Embedding dimension changed from ${existingDim} to ${dimension}, rebuilding vector table`);
       db.exec('DROP TABLE IF EXISTS node_embeddings');
       db.exec(`CREATE VIRTUAL TABLE node_embeddings USING vec0(

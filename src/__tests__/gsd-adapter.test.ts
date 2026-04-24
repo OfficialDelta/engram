@@ -28,7 +28,8 @@ vi.mock('../core/project-identity.js', async (importOriginal) => {
 
 import engramGSDExtension from '../adapters/gsd/index.js';
 import { createNode, createEdge } from '../db/graph.js';
-import { initializeSchema } from '../db/migrations.js';
+import { Database } from '../db/migrations.js';
+import * as sqliteVec from 'sqlite-vec';
 import type { GSDExtensionAPI, GSDActiveUnit, GSDToolCallEvent, GSDBeforeAgentStartEvent, GSDExtensionContext } from '../adapters/gsd/types.js';
 import type { EngramEvent } from '../types.js';
 
@@ -228,7 +229,8 @@ describe('GSD adapter: context injection via before_agent_start', () => {
     const mock = createMockGSDAPI();
     await engramGSDExtension(mock.api);
 
-    const db = initializeSchema(dbPath());
+    const db = new Database(dbPath());
+    sqliteVec.load(db);
     const entryNode = createNode(db, {
       name: 'AuthService',
       nodeType: 'concept',

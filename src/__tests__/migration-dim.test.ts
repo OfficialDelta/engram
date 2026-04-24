@@ -61,7 +61,7 @@ describe('dynamic embedding dimensions', () => {
     db1.prepare('INSERT INTO node_embeddings (node_id, embedding) VALUES (?, ?)').run('old-node', Buffer.from(emb512.buffer));
     db1.close();
 
-    const db2 = initializeSchema(dbPath, 384, 'local');
+    const db2 = initializeSchema(dbPath, 384, 'local', true);
 
     const dim = db2.prepare("SELECT value FROM metadata WHERE key = 'embedding_dimension'").get() as { value: string };
     expect(dim.value).toBe('384');
@@ -106,7 +106,7 @@ describe('dynamic embedding dimensions', () => {
     expect(row384.node_id).toBe('local-node');
     db384.close();
 
-    const db768 = initializeSchema(dbPath, 768, 'ollama');
+    const db768 = initializeSchema(dbPath, 768, 'ollama', true);
     const dim = db768.prepare("SELECT value FROM metadata WHERE key = 'embedding_dimension'").get() as { value: string };
     expect(dim.value).toBe('768');
 
@@ -129,11 +129,22 @@ describe('dynamic embedding dimensions', () => {
     db1.prepare("INSERT INTO nodes (id, name, node_type, description) VALUES (?, ?, ?, ?)").run('n1', 'test-node', 'concept', 'survives rebuild');
     db1.close();
 
-    const db2 = initializeSchema(dbPath, 384, 'local');
+    const db2 = initializeSchema(dbPath, 384, 'local', true);
     const node = db2.prepare('SELECT id, name FROM nodes WHERE id = ?').get('n1') as { id: string; name: string };
     expect(node.id).toBe('n1');
     expect(node.name).toBe('test-node');
 
     db2.close();
+  });
+
+  it('throws on dimension mismatch when allowRebuild is false (default)', () => {
+    const dbPath = makeTmpDb();
+
+    const db1 = initializeSchema(dbPath, 512, 'voyage-3-lite');
+    db1.close();
+
+    expect(() => initializeSchema(dbPath, 384, 'local')).toThrow(
+      /Embedding dimension mismatch.*npx engram re-embed/,
+    );
   });
 });

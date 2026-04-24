@@ -1,3 +1,4 @@
+import type { DatabaseType } from '../db/migrations.js';
 import { loadConfig } from './config.js';
 
 const DIMENSION_MAP: Record<string, number> = {
@@ -12,6 +13,26 @@ const DIMENSION_MAP: Record<string, number> = {
 
 export function getDimensions(provider: string): number {
   return DIMENSION_MAP[provider] ?? 512;
+}
+
+export function validateEmbeddingDimension(
+  db: DatabaseType,
+  provider: string,
+): { existing: number; expected: number; existingProvider: string; currentProvider: string } | null {
+  const dimRow = db.prepare('SELECT value FROM metadata WHERE key = ?').get('embedding_dimension') as { value: string } | undefined;
+  if (!dimRow) return null;
+
+  const existing = Number(dimRow.value);
+  const expected = getDimensions(provider);
+  if (existing === expected) return null;
+
+  const providerRow = db.prepare('SELECT value FROM metadata WHERE key = ?').get('embedding_provider') as { value: string } | undefined;
+  return {
+    existing,
+    expected,
+    existingProvider: providerRow?.value ?? 'unknown',
+    currentProvider: provider,
+  };
 }
 
 type EmbeddingPipeline = (texts: string[], opts: { pooling: string; normalize: boolean }) => Promise<{ tolist(): number[][] }>;
