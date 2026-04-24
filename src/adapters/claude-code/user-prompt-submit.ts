@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializeSchema } from '../../db/migrations.js';
@@ -9,6 +9,7 @@ import { spreadingActivation } from '../../core/retrieval.js';
 import { extractEntryPoints, resolveEntryPoints } from '../../core/entry-points.js';
 import { loadConfig } from '../../core/config.js';
 import { loadSessionState, saveSessionState } from '../../core/session-state.js';
+import { readModifyWriteInjected } from '../../core/injected-state.js';
 
 export { extractEntryPoints } from '../../core/entry-points.js';
 
@@ -73,11 +74,7 @@ async function main(): Promise<void> {
       additionalContext = buildContext([], [], filtered);
 
       const newIds = [...filtered.high, ...filtered.medium].map(r => r.node.id);
-      if (newIds.length > 0) {
-        try {
-          writeFileSync(injectedPath, JSON.stringify([...injectedIds, ...newIds]));
-        } catch { /* P004 */ }
-      }
+      readModifyWriteInjected(injectedPath, newIds);
     } catch (err) {
       const dataDir = getDataDir(cwd);
       logError(dataDir, `Spreading activation failed: ${err instanceof Error ? err.message : String(err)}`);

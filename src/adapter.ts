@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { readModifyWriteInjected } from './core/injected-state.js';
 import { join } from 'node:path';
 import { initializeSchema } from './db/migrations.js';
 import { getDataDir, getDbPath, ensureDataDirs } from './core/project-identity.js';
@@ -166,11 +167,7 @@ export function onPrompt(session: AdapterSession, prompt: string): { context: st
     context = buildContext([], [], filtered);
 
     const newIds = [...filtered.high, ...filtered.medium].map((r: NodeResult) => r.node.id);
-    if (newIds.length > 0) {
-      try {
-        writeFileSync(injectedPath, JSON.stringify([...injectedIds, ...newIds]));
-      } catch { /* P004 */ }
-    }
+    readModifyWriteInjected(injectedPath, newIds);
   } catch {
     // retrieval failures are non-fatal
   }
