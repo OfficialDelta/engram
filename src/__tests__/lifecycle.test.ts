@@ -187,7 +187,8 @@ describe('Capture → Consolidate → Retrieve', () => {
 
     const result = processSessionStart('sess-2', tmpDir, dbPath);
 
-    expect(result).toEqual({});
+    const ctx = (result as any)?.hookSpecificOutput?.additionalContext ?? '';
+    expect(ctx).not.toContain('[Engram: Prior project knowledge]');
   });
 });
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializeSchema } from '../../db/migrations.js';
@@ -56,7 +56,28 @@ async function main(): Promise<void> {
     let additionalContext = '';
     try {
       const tieredResults = spreadingActivation(db, entryPoints);
-      additionalContext = buildContext([], [], tieredResults);
+
+      let injectedIds: string[] = [];
+      const dataDir = getDataDir(cwd);
+      const injectedPath = join(dataDir, 'events', `${sessionId}.injected.json`);
+      try {
+        injectedIds = JSON.parse(readFileSync(injectedPath, 'utf-8'));
+        if (!Array.isArray(injectedIds)) injectedIds = [];
+      } catch { injectedIds = []; }
+      const seen = new Set(injectedIds);
+      const filtered = {
+        high: tieredResults.high.filter(r => !seen.has(r.node.id)),
+        medium: tieredResults.medium.filter(r => !seen.has(r.node.id)),
+      };
+
+      additionalContext = buildContext([], [], filtered);
+
+      const newIds = [...filtered.high, ...filtered.medium].map(r => r.node.id);
+      if (newIds.length > 0) {
+        try {
+          writeFileSync(injectedPath, JSON.stringify([...injectedIds, ...newIds]));
+        } catch { /* P004 */ }
+      }
     } catch (err) {
       const dataDir = getDataDir(cwd);
       logError(dataDir, `Spreading activation failed: ${err instanceof Error ? err.message : String(err)}`);
