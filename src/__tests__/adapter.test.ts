@@ -452,7 +452,7 @@ describe('Stop handler', () => {
     expect(state.turnCount).toBe(3);
     expect(state.toolCallCount).toBe(0);
 
-    expect(buildTurnCompleteEvent).toHaveBeenCalledWith('sess-1', 5, 3);
+    expect(buildTurnCompleteEvent).toHaveBeenCalledWith('sess-1', 5, 3, {});
     expect(appendEvent).toHaveBeenCalled();
   });
 

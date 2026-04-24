@@ -3,11 +3,12 @@ import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializeSchema } from '../../db/migrations.js';
-import { getDataDir, getDbPath } from '../../core/project-identity.js';
+import { getDataDir, getDbPath, ensureDataDirs } from '../../core/project-identity.js';
 import { buildContext } from '../../core/context-builder.js';
 import { spreadingActivation } from '../../core/retrieval.js';
 import { extractEntryPoints, resolveEntryPoints } from '../../core/entry-points.js';
 import { loadConfig } from '../../core/config.js';
+import { loadSessionState, saveSessionState } from '../../core/session-state.js';
 
 export { extractEntryPoints } from '../../core/entry-points.js';
 
@@ -28,6 +29,14 @@ async function main(): Promise<void> {
 
     const cwd = (input.cwd as string) ?? process.cwd();
     const prompt = (input.prompt as string) ?? '';
+    const sessionId = input.session_id as string;
+
+    if (prompt && sessionId) {
+      const dataDir = ensureDataDirs(cwd);
+      const state = loadSessionState(dataDir, sessionId);
+      state.lastUserPrompt = prompt;
+      saveSessionState(dataDir, sessionId, state);
+    }
 
     const dbPath = getDbPath(cwd);
     const db = initializeSchema(dbPath);
