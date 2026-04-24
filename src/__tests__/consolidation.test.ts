@@ -140,6 +140,24 @@ describe('pass1Summarize', () => {
     expect(result[0]!.windowIndex).toBe(0);
   });
 
+  it('parses gotchas and lessonsLearned from response', async () => {
+    const pass1JSON = JSON.stringify({
+      summary: 'Agent discovered traps',
+      filesModified: ['/src/bar.ts'],
+      decisionsIdentified: [],
+      gotchas: ['trap1'],
+      lessonsLearned: ['lesson1'],
+      outcome: 'progress',
+    });
+    const client = createMockClient(pass1JSON, defaultPass2Input);
+    const windows = [makeSampleEvents(3)];
+    const result = await pass1Summarize(windows, client, 'claude-sonnet-4-6');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.gotchas).toEqual(['trap1']);
+    expect(result[0]!.lessonsLearned).toEqual(['lesson1']);
+  });
+
   it('creates fallback summary for non-JSON response', async () => {
     const client = createMockClient('This is not valid JSON at all', defaultPass2Input);
     const windows = [makeSampleEvents(3)];

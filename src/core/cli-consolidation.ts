@@ -64,9 +64,11 @@ Events:
 ${JSON.stringify(windowEvts, null, 2)}
 
 Return a JSON object with these fields:
-- summary: what the agent was doing and what happened (2-3 sentences with causal links)
+- summary: what the agent was doing, what blocked it, and what non-obvious things were discovered (2-3 sentences with causal links)
 - filesModified: array of file paths modified in these events
 - decisionsIdentified: array of decision descriptions (empty array if none)
+- gotchas: array of non-obvious traps, constraints, or surprises encountered — things that would bite a developer unfamiliar with this area (empty array if none)
+- lessonsLearned: array of things that should be known to avoid repeating mistakes or wasted effort (empty array if none)
 - outcome: one of "progress", "debugging", "blocked", "completed"
 
 Additional extraction requirements:
@@ -82,6 +84,8 @@ Additional extraction requirements:
         summary?: string;
         filesModified?: string[];
         decisionsIdentified?: string[];
+        gotchas?: string[];
+        lessonsLearned?: string[];
         outcome?: string;
       };
       summaries.push({
@@ -90,6 +94,8 @@ Additional extraction requirements:
         summary: parsed.summary ?? rawText,
         filesModified: parsed.filesModified ?? [],
         decisionsIdentified: parsed.decisionsIdentified ?? [],
+        gotchas: parsed.gotchas ?? [],
+        lessonsLearned: parsed.lessonsLearned ?? [],
         outcome: (parsed.outcome as WindowSummary['outcome']) ?? 'progress',
       });
     } catch {
@@ -114,7 +120,7 @@ export async function cliPass2Extract(
   model: string,
 ): Promise<{ episode: StructuredEpisode; changes: GraphChangeRequest }> {
   const summaryText = summaries
-    .map((s, i) => `Window ${i}: ${s.summary}\nFiles: ${s.filesModified.join(', ')}\nDecisions: ${s.decisionsIdentified.join(', ')}\nOutcome: ${s.outcome}`)
+    .map((s, i) => `Window ${i}: ${s.summary}\nFiles: ${s.filesModified.join(', ')}\nDecisions: ${s.decisionsIdentified.join(', ')}\nGotchas: ${(s.gotchas ?? []).join(', ')}\nLessons: ${(s.lessonsLearned ?? []).join(', ')}\nOutcome: ${s.outcome}`)
     .join('\n\n');
 
   const prompt = `Analyze these session window summaries and extract a structured episode with graph changes.
@@ -125,10 +131,14 @@ Decision extraction guidance:
 - For implicit decisions: set isImplicit=true, infer the rationale from context. Only flag as a decision when alternatives were clearly available — routine code changes are not decisions. Set causallyImportant=false.
 - Each decision node should have nodeType='decision' and a descriptive name summarizing the choice made.
 - Include affected file paths in affectedFiles for every decision node.
+- Flag decisions that have hidden dependencies — choices that only work because of an unstated constraint, prior decision, or environmental assumption. Prefix the description of such decisions with "[hidden-dependency]" so downstream consumers can identify them.
 
 Rationale formatting:
 - For explicit decisions (isImplicit=false): include the agent's stated reason verbatim, without modification or hedging.
 - For implicit decisions (isImplicit=true): prefix the inferred rationale with "[inferred]" so downstream consumers can distinguish stated from inferred reasoning.
+
+Error extraction guidance:
+- Identify bugs that are likely to recur — bugs caused by a false assumption not captured in code (not transient typos or tool failures). Prefix the rootCause of such errors with "[recurring-risk]".
 
 ${summaryText}
 

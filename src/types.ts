@@ -152,6 +152,8 @@ export type WindowSummary = {
   summary: string;
   filesModified: string[];
   decisionsIdentified: string[];
+  gotchas?: string[];
+  lessonsLearned?: string[];
   outcome: 'progress' | 'debugging' | 'blocked' | 'completed';
 };
 
