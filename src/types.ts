@@ -200,6 +200,7 @@ export type StrengthParams = {
 
 export type ConsolidationConfig = {
   client?: unknown;
+  consolidationProvider?: 'api' | 'claude-cli';
   pass1Model?: string;
   pass2Model?: string;
   windowSize?: number;

@@ -13,6 +13,7 @@ const KNOWN_KEYS = new Set([
   'consolidation.eventThreshold',
   'consolidation.windowSize',
   'consolidation.windowOverlap',
+  'consolidation.provider',
 ]);
 
 const NUMERIC_KEYS = new Set([
@@ -71,7 +72,8 @@ Valid keys:
   llm.apiKey, llm.pass1Model, llm.pass2Model,
   embedding.provider, embedding.apiKey, embedding.ollamaUrl,
   consolidation.turnThreshold, consolidation.eventThreshold,
-  consolidation.windowSize, consolidation.windowOverlap
+  consolidation.windowSize, consolidation.windowOverlap,
+  consolidation.provider
 
 Options:
   --help  Show this help message`);
@@ -159,9 +161,18 @@ async function configWizard(overridePath?: string): Promise<void> {
   try {
     const config = loadConfig(overridePath);
 
-    const apiKey = await rl.question('Anthropic API key (for LLM consolidation): ');
-    if (apiKey.trim()) {
-      config.llm.apiKey = apiKey.trim();
+    console.log('Consolidation provider:');
+    console.log('  1) Anthropic API (requires API key) [default]');
+    console.log('  2) Claude CLI (uses your Claude subscription)');
+    const providerAnswer = await rl.question('Choice [1]: ');
+
+    if (providerAnswer.trim() === '2') {
+      config.consolidation = { ...config.consolidation, provider: 'claude-cli' };
+    } else {
+      const apiKey = await rl.question('Anthropic API key (for LLM consolidation): ');
+      if (apiKey.trim()) {
+        config.llm.apiKey = apiKey.trim();
+      }
     }
 
     console.log('\nEmbedding providers:');

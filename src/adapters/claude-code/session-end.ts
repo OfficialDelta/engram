@@ -24,7 +24,7 @@ export function processSessionEnd(
 ): Record<string, unknown> {
   const cfg = loadConfig();
 
-  if (!cfg.llm.apiKey && !process.env.ANTHROPIC_API_KEY) {
+  if (cfg.consolidation?.provider !== 'claude-cli' && !cfg.llm.apiKey && !process.env.ANTHROPIC_API_KEY) {
     logError(dataDir, 'Consolidation skipped: no API key configured. Run "engram config" to set up.');
     return {};
   }

@@ -10,6 +10,7 @@ export type EngramConfig = {
     eventThreshold?: number;
     windowSize?: number;
     windowOverlap?: number;
+    provider?: 'api' | 'claude-cli';
   };
   maintenance?: {
     decayThreshold?: number;
@@ -113,6 +114,9 @@ export function validateConfig(config: unknown): { valid: boolean; errors: strin
           errors.push(`consolidation.${key} must be a positive number`);
         }
       }
+    }
+    if (con.provider !== undefined && !['api', 'claude-cli'].includes(con.provider as string)) {
+      errors.push("consolidation.provider must be 'api' or 'claude-cli'");
     }
   }
 
