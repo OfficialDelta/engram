@@ -256,6 +256,7 @@ export async function applyGraphChanges(
   changes: GraphChangeRequest,
   sessionId: string,
   episodeId: string,
+  episodeOutcome: 'success' | 'partial' | 'failure',
   embeddingConfig?: { provider?: string; apiKey?: string },
 ): Promise<Map<string, string>> {
   const nodeIdMap = new Map<string, string>();
@@ -293,7 +294,9 @@ export async function applyGraphChanges(
           const meta = existing.metadata as Record<string, unknown>;
           const sourceEpisodes = (meta.sourceEpisodes as string[] | undefined) ?? [];
           sourceEpisodes.push(episodeId);
-          const newMeta = { ...meta, sourceEpisodes };
+          const prevSuccessful = (meta.successfulEpisodeCount as number | undefined) ?? (sourceEpisodes.length - 1);
+          const successfulEpisodeCount = prevSuccessful + (episodeOutcome === 'success' ? 1 : 0);
+          const newMeta = { ...meta, sourceEpisodes, successfulEpisodeCount };
           updateNode(db, op.existingNodeId, {
             ...(op.updateDescription
               ? { description: existing.description + '; ' + op.node.description }
@@ -303,7 +306,7 @@ export async function applyGraphChanges(
           const newStrength = computeStrength({
             sourceEpisodeCount: sourceEpisodes.length,
             sessionsWithoutReinforcement: 0,
-            successfulEpisodes: sourceEpisodes.length,
+            successfulEpisodes: successfulEpisodeCount,
             totalEpisodes: sourceEpisodes.length,
             causallyImportant: op.node.causallyImportant,
           });
@@ -319,8 +322,8 @@ export async function applyGraphChanges(
           strength: computeStrength({
             sourceEpisodeCount: 1,
             sessionsWithoutReinforcement: 0,
-            successfulEpisodes: 1,
-            totalEpisodes: 1,
+            successfulEpisodes: episodeOutcome === 'success' ? 1 : 0,
+            totalEpisodes: episodeOutcome === 'success' ? 1 : 0,
             causallyImportant: op.node.causallyImportant,
           }),
           metadata: { sourceEpisodes: [episodeId] },
@@ -343,8 +346,8 @@ export async function applyGraphChanges(
           strength: computeStrength({
             sourceEpisodeCount: 1,
             sessionsWithoutReinforcement: 0,
-            successfulEpisodes: 1,
-            totalEpisodes: 1,
+            successfulEpisodes: episodeOutcome === 'success' ? 1 : 0,
+            totalEpisodes: episodeOutcome === 'success' ? 1 : 0,
             causallyImportant: op.node.causallyImportant,
           }),
           metadata: { sourceEpisodes: [episodeId] },
@@ -506,7 +509,7 @@ export async function consolidateSession(
       metadata: episode as unknown as Record<string, unknown>,
     });
 
-    const nodeIdMap = await applyGraphChanges(db, changes, sessionId, episodeRecord.id, config?.embeddingConfig);
+    const nodeIdMap = await applyGraphChanges(db, changes, sessionId, episodeRecord.id, episode.outcome, config?.embeddingConfig);
 
     db.prepare('UPDATE episodes SET nodes_involved = ? WHERE id = ?').run(
       JSON.stringify([...nodeIdMap.values()]),

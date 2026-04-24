@@ -15,6 +15,7 @@ vi.mock('../core/embed.ts', () => ({
 
 vi.mock('../core/entity-resolution.ts', () => ({
   resolveEntity: vi.fn().mockResolvedValue({ action: 'create_new' }),
+  shouldUpdateDescription: vi.fn().mockResolvedValue(true),
 }));
 
 function createMockClient(pass1Response: string, pass2ToolInput: { episode: StructuredEpisode; changes: GraphChangeRequest }) {
@@ -265,7 +266,7 @@ describe('applyGraphChanges', () => {
         ],
       };
 
-      const nodeIdMap = await applyGraphChanges(db, changes, 'sess-1', 'ep-1');
+      const nodeIdMap = await applyGraphChanges(db, changes, 'sess-1', 'ep-1', 'success');
 
       expect(nodeIdMap.size).toBe(2);
       expect(nodeIdMap.has('Node A')).toBe(true);
@@ -276,6 +277,120 @@ describe('applyGraphChanges', () => {
 
       const edgesCount = db.prepare('SELECT COUNT(*) as c FROM edges').get() as { c: number };
       expect(edgesCount.c).toBe(1);
+    } finally {
+      db.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('new node with success outcome has strength 1.0', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-test-'));
+    const dbPath = path.join(tmpDir, 'test.db');
+    const db = initializeSchema(dbPath);
+
+    try {
+      const changes: GraphChangeRequest = {
+        nodesToCreate: [
+          { name: 'Success Node', nodeType: 'concept', description: 'Succeeded', affectedFiles: [], causallyImportant: false },
+        ],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      };
+
+      const nodeIdMap = await applyGraphChanges(db, changes, 'sess-1', 'ep-1', 'success');
+      const nodeId = nodeIdMap.get('Success Node')!;
+      const row = db.prepare('SELECT strength FROM nodes WHERE id = ?').get(nodeId) as { strength: number };
+      expect(row.strength).toBe(1.0);
+    } finally {
+      db.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('new node with partial outcome has strength ≈ 0.5', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-test-'));
+    const dbPath = path.join(tmpDir, 'test.db');
+    const db = initializeSchema(dbPath);
+
+    try {
+      const changes: GraphChangeRequest = {
+        nodesToCreate: [
+          { name: 'Partial Node', nodeType: 'concept', description: 'Partially succeeded', affectedFiles: [], causallyImportant: false },
+        ],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      };
+
+      const nodeIdMap = await applyGraphChanges(db, changes, 'sess-1', 'ep-1', 'partial');
+      const nodeId = nodeIdMap.get('Partial Node')!;
+      const row = db.prepare('SELECT strength FROM nodes WHERE id = ?').get(nodeId) as { strength: number };
+      expect(row.strength).toBeCloseTo(0.5, 1);
+    } finally {
+      db.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('new node with failure outcome has strength ≈ 0.5', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-test-'));
+    const dbPath = path.join(tmpDir, 'test.db');
+    const db = initializeSchema(dbPath);
+
+    try {
+      const changes: GraphChangeRequest = {
+        nodesToCreate: [
+          { name: 'Failed Node', nodeType: 'concept', description: 'Failed', affectedFiles: [], causallyImportant: false },
+        ],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      };
+
+      const nodeIdMap = await applyGraphChanges(db, changes, 'sess-1', 'ep-1', 'failure');
+      const nodeId = nodeIdMap.get('Failed Node')!;
+      const row = db.prepare('SELECT strength FROM nodes WHERE id = ?').get(nodeId) as { strength: number };
+      expect(row.strength).toBeCloseTo(0.5, 1);
+    } finally {
+      db.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('merge with failure outcome tracks successfulEpisodeCount and lowers strength', async () => {
+    const { resolveEntity } = await import('../core/entity-resolution.js');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-test-'));
+    const dbPath = path.join(tmpDir, 'test.db');
+    const db = initializeSchema(dbPath);
+
+    try {
+      const changes1: GraphChangeRequest = {
+        nodesToCreate: [
+          { name: 'Merge Target', nodeType: 'concept', description: 'Original', affectedFiles: [], causallyImportant: false },
+        ],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      };
+      const map1 = await applyGraphChanges(db, changes1, 'sess-1', 'ep-1', 'success');
+      const existingId = map1.get('Merge Target')!;
+
+      const origStrength = (db.prepare('SELECT strength FROM nodes WHERE id = ?').get(existingId) as { strength: number }).strength;
+      expect(origStrength).toBe(1.0);
+
+      vi.mocked(resolveEntity).mockResolvedValueOnce({ action: 'merge', existingNodeId: existingId });
+
+      const changes2: GraphChangeRequest = {
+        nodesToCreate: [
+          { name: 'Merge Target', nodeType: 'concept', description: 'Updated', affectedFiles: [], causallyImportant: false },
+        ],
+        nodesToUpdate: [],
+        edgesToCreate: [],
+      };
+      await applyGraphChanges(db, changes2, 'sess-2', 'ep-2', 'failure');
+
+      const row = db.prepare('SELECT strength, metadata FROM nodes WHERE id = ?').get(existingId) as { strength: number; metadata: string };
+      const meta = JSON.parse(row.metadata) as { successfulEpisodeCount?: number; sourceEpisodes?: string[] };
+      expect(meta.successfulEpisodeCount).toBe(1);
+      expect(meta.sourceEpisodes).toEqual(['ep-1', 'ep-2']);
+      expect(row.strength).toBeLessThan(1.0);
     } finally {
       db.close();
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -298,7 +413,7 @@ describe('applyGraphChanges', () => {
         ],
       };
 
-      const nodeIdMap = await applyGraphChanges(db, changes, 'sess-1', 'ep-1');
+      const nodeIdMap = await applyGraphChanges(db, changes, 'sess-1', 'ep-1', 'success');
       expect(nodeIdMap.size).toBe(1);
 
       const edgesCount = db.prepare('SELECT COUNT(*) as c FROM edges').get() as { c: number };
