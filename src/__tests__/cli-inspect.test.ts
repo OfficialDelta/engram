@@ -11,10 +11,12 @@ vi.mock('../core/project-identity.js', () => ({
 }));
 
 vi.mock('../db/migrations.js', () => ({
-  Database: vi.fn(() => ({
-    prepare: vi.fn(() => ({ get: mockGet, all: mockAll })),
-    close: mockClose,
-  })),
+  Database: vi.fn(function () {
+    return {
+      prepare: vi.fn(() => ({ get: mockGet, all: mockAll })),
+      close: mockClose,
+    };
+  }),
 }));
 
 vi.mock('node:fs', async () => {
@@ -63,10 +65,12 @@ describe('runInspect', () => {
     mockAll.mockReturnValue([]);
 
     const mockPrepare = vi.fn(() => ({ get: mockGet, all: mockAll }));
-    vi.mocked(Database).mockReturnValue({
-      prepare: mockPrepare,
-      close: mockClose,
-    } as any);
+    vi.mocked(Database).mockImplementation(function () {
+      return {
+        prepare: mockPrepare,
+        close: mockClose,
+      } as any;
+    });
 
     const { runInspect } = await import('../cli/inspect.js');
     runInspect({ cwd: '/tmp/test-project', top: 5 });
@@ -86,10 +90,12 @@ describe('runInspect', () => {
     mockAll.mockReturnValue([]);
 
     const mockPrepare = vi.fn(() => ({ get: mockGet, all: mockAll }));
-    vi.mocked(Database).mockReturnValue({
-      prepare: mockPrepare,
-      close: mockClose,
-    } as any);
+    vi.mocked(Database).mockImplementation(function () {
+      return {
+        prepare: mockPrepare,
+        close: mockClose,
+      } as any;
+    });
 
     const { runInspect } = await import('../cli/inspect.js');
     runInspect({ cwd: '/tmp/test-project', type: 'concept' });
@@ -110,10 +116,12 @@ describe('runInspect', () => {
     mockAll.mockReturnValue([]);
 
     const mockPrepare = vi.fn(() => ({ get: mockGet, all: mockAll }));
-    vi.mocked(Database).mockReturnValue({
-      prepare: mockPrepare,
-      close: mockClose,
-    } as any);
+    vi.mocked(Database).mockImplementation(function () {
+      return {
+        prepare: mockPrepare,
+        close: mockClose,
+      } as any;
+    });
 
     const { runInspect } = await import('../cli/inspect.js');
     const result = runInspect({ cwd: '/tmp/test-project' });

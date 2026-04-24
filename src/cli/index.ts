@@ -17,6 +17,8 @@ Commands:
   status      Show engram graph stats, hook registration, and data info
   config      Show, set, or interactively configure engram settings
   mcp         Start MCP server exposing engram tools
+  consolidate Manually consolidate stale sessions
+  inspect     Show detailed knowledge graph summary
 
 Run 'engram <command> --help' for more information on a command.
 
@@ -117,9 +119,54 @@ Options:
       console.log(formatStatus(result));
       break;
     }
+    case 'consolidate': {
+      if (process.argv.slice(3).includes('--help')) {
+        const { printUsage: printConsolidateUsage } = await import('./consolidate.js');
+        printConsolidateUsage();
+        break;
+      }
+      const { runConsolidate } = await import('./consolidate.js');
+      const args = process.argv.slice(3);
+      const dryRun = args.includes('--dry-run');
+      const retryFailed = args.includes('--retry-failed');
+      const sessionId = args.find(a => !a.startsWith('--'));
+      const result = await runConsolidate({
+        cwd: process.cwd(),
+        sessionId,
+        dryRun,
+        retryFailed,
+      });
+      if (!dryRun) {
+        console.log(`\nDone: ${result.processed} processed, ${result.failed} failed, ${result.skipped} skipped`);
+      }
+      break;
+    }
+    case 'inspect': {
+      if (process.argv.slice(3).includes('--help')) {
+        const { printUsage: printInspectUsage } = await import('./inspect.js');
+        printInspectUsage();
+        break;
+      }
+      const { runInspect, formatInspect } = await import('./inspect.js');
+      const inspectArgs = process.argv.slice(3);
+      const json = inspectArgs.includes('--json');
+      const superseded = inspectArgs.includes('--superseded');
+      const topIdx = inspectArgs.indexOf('--top');
+      const top = topIdx !== -1 ? parseInt(inspectArgs[topIdx + 1], 10) : undefined;
+      const typeIdx = inspectArgs.indexOf('--type');
+      const type = typeIdx !== -1 ? inspectArgs[typeIdx + 1] : undefined;
+      try {
+        const inspectResult = runInspect({ cwd: process.cwd(), top, type, superseded, json });
+        console.log(json ? JSON.stringify(inspectResult, null, 2) : formatInspect(inspectResult));
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+      break;
+    }
     default:
       if (subcommand && subcommand !== '--help' && subcommand !== '-h') {
-        console.error(`Unknown command: ${subcommand}\n\nRun 'engram --help' for available commands.\nDid you mean: install, uninstall, status, config, mcp?\n`);
+        console.error(`Unknown command: ${subcommand}\n\nRun 'engram --help' for available commands.\nDid you mean: install, uninstall, status, config, mcp, consolidate, inspect?\n`);
         process.exit(1);
         break;
       }

@@ -33,6 +33,22 @@ describe('engram mcp --help', () => {
   });
 });
 
+describe('engram consolidate --help', () => {
+  it('prints usage text for consolidate', () => {
+    const { stdout, exitCode } = run('consolidate', '--help');
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Usage: engram consolidate');
+  });
+});
+
+describe('engram inspect --help', () => {
+  it('prints usage text for inspect', () => {
+    const { stdout, exitCode } = run('inspect', '--help');
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Usage: engram inspect');
+  });
+});
+
 describe('unknown command suggests alternatives', () => {
   it('prints suggestion and exits with code 1', () => {
     const { stderr, exitCode } = run('boguscmd');
@@ -40,6 +56,8 @@ describe('unknown command suggests alternatives', () => {
     expect(stderr).toContain('Unknown command: boguscmd');
     expect(stderr).toContain("Run 'engram --help' for available commands.");
     expect(stderr).toContain('Did you mean:');
+    expect(stderr).toContain('consolidate');
+    expect(stderr).toContain('inspect');
   });
 });
 
@@ -51,5 +69,12 @@ describe('main help includes getting started workflow', () => {
     expect(stdout).toContain('engram install');
     expect(stdout).toContain('engram config');
     expect(stdout).toContain('engram status');
+  });
+
+  it('lists consolidate and inspect commands', () => {
+    const { stdout, exitCode } = run('--help');
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('consolidate');
+    expect(stdout).toContain('inspect');
   });
 });
