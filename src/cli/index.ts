@@ -19,6 +19,7 @@ Commands:
   mcp         Start MCP server exposing engram tools
   consolidate Manually consolidate stale sessions
   inspect     Show detailed knowledge graph summary
+  re-embed    Re-embed all nodes after changing embedding provider
 
 Run 'engram <command> --help' for more information on a command.
 
@@ -164,9 +165,21 @@ Options:
       }
       break;
     }
+    case 're-embed': {
+      if (process.argv.slice(3).includes('--help')) {
+        const { printUsage: printReEmbedUsage } = await import('./re-embed.js');
+        printReEmbedUsage();
+        break;
+      }
+      const { runReEmbed } = await import('./re-embed.js');
+      const reEmbedArgs = process.argv.slice(3);
+      const dryRun = reEmbedArgs.includes('--dry-run');
+      await runReEmbed({ cwd: process.cwd(), dryRun });
+      break;
+    }
     default:
       if (subcommand && subcommand !== '--help' && subcommand !== '-h') {
-        console.error(`Unknown command: ${subcommand}\n\nRun 'engram --help' for available commands.\nDid you mean: install, uninstall, status, config, mcp, consolidate, inspect?\n`);
+        console.error(`Unknown command: ${subcommand}\n\nRun 'engram --help' for available commands.\nDid you mean: install, uninstall, status, config, mcp, consolidate, inspect, re-embed?\n`);
         process.exit(1);
         break;
       }
