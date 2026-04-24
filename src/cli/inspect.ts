@@ -159,7 +159,7 @@ function main(): void {
   let top: number | undefined;
   const topIdx = args.indexOf('--top');
   if (topIdx !== -1 && args[topIdx + 1]) {
-    top = parseInt(args[topIdx + 1], 10);
+    top = parseInt(args[topIdx + 1]!, 10);
     if (isNaN(top)) {
       console.error('Error: --top requires a numeric argument');
       process.exit(1);
@@ -172,7 +172,7 @@ function main(): void {
     type = args[typeIdx + 1];
   }
 
-  const result = runInspect({ cwd: process.cwd(), top, type, superseded, json });
+  const result = runInspect({ cwd: process.cwd(), ...(top != null ? { top } : {}), ...(type != null ? { type } : {}), superseded, json });
 
   if (json) {
     console.log(JSON.stringify(result, null, 2));

@@ -132,7 +132,7 @@ Options:
       const sessionId = args.find(a => !a.startsWith('--'));
       const result = await runConsolidate({
         cwd: process.cwd(),
-        sessionId,
+        ...(sessionId != null ? { sessionId } : {}),
         dryRun,
         retryFailed,
       });
@@ -152,11 +152,11 @@ Options:
       const json = inspectArgs.includes('--json');
       const superseded = inspectArgs.includes('--superseded');
       const topIdx = inspectArgs.indexOf('--top');
-      const top = topIdx !== -1 ? parseInt(inspectArgs[topIdx + 1], 10) : undefined;
+      const top = topIdx !== -1 ? parseInt(inspectArgs[topIdx + 1]!, 10) : undefined;
       const typeIdx = inspectArgs.indexOf('--type');
       const type = typeIdx !== -1 ? inspectArgs[typeIdx + 1] : undefined;
       try {
-        const inspectResult = runInspect({ cwd: process.cwd(), top, type, superseded, json });
+        const inspectResult = runInspect({ cwd: process.cwd(), ...(top != null ? { top } : {}), ...(type != null ? { type } : {}), superseded, json });
         console.log(json ? JSON.stringify(inspectResult, null, 2) : formatInspect(inspectResult));
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));

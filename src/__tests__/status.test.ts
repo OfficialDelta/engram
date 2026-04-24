@@ -93,11 +93,11 @@ describe('status CLI', () => {
 
     const result = runStatus(statusOpts(claudeDir));
 
-    expect(result.hooksMissing).toEqual(['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop']);
+    expect(result.hooksMissing).toEqual(['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop', 'PostCompact', 'SessionEnd']);
     expect(result.hooksRegistered).toEqual([]);
   });
 
-  it('reports all 4 hooks registered when settings.json has engram hooks', () => {
+  it('reports all 6 hooks registered when settings.json has engram hooks', () => {
     const claudeDir = path.join(tmpDir, '.claude');
     fs.mkdirSync(claudeDir, { recursive: true });
     fs.writeFileSync(
@@ -107,12 +107,14 @@ describe('status CLI', () => {
         SessionStart: { hooks: [engramHook('session-start')] },
         UserPromptSubmit: { hooks: [engramHook('user-prompt-submit')] },
         Stop: { hooks: [engramHook('stop')] },
+        PostCompact: { hooks: [engramHook('post-compact')] },
+        SessionEnd: { hooks: [engramHook('session-end')] },
       }),
     );
 
     const result = runStatus(statusOpts(claudeDir));
 
-    expect(result.hooksRegistered).toEqual(['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop']);
+    expect(result.hooksRegistered).toEqual(['PostToolUse', 'SessionStart', 'UserPromptSubmit', 'Stop', 'PostCompact', 'SessionEnd']);
     expect(result.hooksMissing).toEqual([]);
   });
 
@@ -130,7 +132,7 @@ describe('status CLI', () => {
     const result = runStatus(statusOpts(claudeDir));
 
     expect(result.hooksRegistered).toEqual(['PostToolUse', 'Stop']);
-    expect(result.hooksMissing).toEqual(['SessionStart', 'UserPromptSubmit']);
+    expect(result.hooksMissing).toEqual(['SessionStart', 'UserPromptSubmit', 'PostCompact', 'SessionEnd']);
   });
 
   it('returns dbError string when DB file exists but is corrupt', () => {

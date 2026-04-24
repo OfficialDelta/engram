@@ -64,7 +64,7 @@ describe('runInspect', () => {
     mockGet.mockReturnValue({ count: 0 });
     mockAll.mockReturnValue([]);
 
-    const mockPrepare = vi.fn(() => ({ get: mockGet, all: mockAll }));
+    const mockPrepare = vi.fn((_sql: string) => ({ get: mockGet, all: mockAll }));
     vi.mocked(Database).mockImplementation(function () {
       return {
         prepare: mockPrepare,
@@ -81,7 +81,7 @@ describe('runInspect', () => {
     expect(highStrengthCall).toBeDefined();
 
     const allCalls = mockAll.mock.calls;
-    const limitCall = allCalls.find((c) => c.length > 0 && c[c.length - 1] === 5);
+    const limitCall = allCalls.find((c: unknown[]) => c.length > 0 && c[c.length - 1] === 5);
     expect(limitCall).toBeDefined();
   });
 
@@ -89,7 +89,7 @@ describe('runInspect', () => {
     mockGet.mockReturnValue({ count: 0 });
     mockAll.mockReturnValue([]);
 
-    const mockPrepare = vi.fn(() => ({ get: mockGet, all: mockAll }));
+    const mockPrepare = vi.fn((_sql: string) => ({ get: mockGet, all: mockAll }));
     vi.mocked(Database).mockImplementation(function () {
       return {
         prepare: mockPrepare,
@@ -106,7 +106,7 @@ describe('runInspect', () => {
     expect(typeFilteredCalls.length).toBe(2);
 
     const allCallsWithConcept = mockAll.mock.calls.filter(
-      (c) => c.includes('concept'),
+      (c: unknown[]) => c.includes('concept'),
     );
     expect(allCallsWithConcept.length).toBeGreaterThanOrEqual(2);
   });
@@ -115,7 +115,7 @@ describe('runInspect', () => {
     mockGet.mockReturnValue({ count: 0 });
     mockAll.mockReturnValue([]);
 
-    const mockPrepare = vi.fn(() => ({ get: mockGet, all: mockAll }));
+    const mockPrepare = vi.fn((_sql: string) => ({ get: mockGet, all: mockAll }));
     vi.mocked(Database).mockImplementation(function () {
       return {
         prepare: mockPrepare,

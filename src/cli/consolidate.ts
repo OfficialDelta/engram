@@ -146,7 +146,7 @@ function main(): void {
 
   runConsolidate({
     cwd: process.cwd(),
-    sessionId,
+    ...(sessionId != null ? { sessionId } : {}),
     retryFailed,
     dryRun,
   }).catch((err) => {

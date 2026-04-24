@@ -223,7 +223,7 @@ describe('Full Lifecycle with PostCompact Consolidation Cycle', () => {
     processStop(sessionId, tmpDir, dbPath, { userMessage: 'Working on auth' });
     const eventsAfterStop = getSessionEvents(sessionId, tmpDir);
     expect(eventsAfterStop.length).toBeGreaterThanOrEqual(3);
-    const lastEvent = eventsAfterStop[eventsAfterStop.length - 1];
+    const lastEvent = eventsAfterStop[eventsAfterStop.length - 1]!;
     expect(lastEvent.type).toBe('turn_complete');
 
     // f. PostCompact — triggers consolidation spawn

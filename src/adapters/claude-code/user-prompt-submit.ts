@@ -43,7 +43,7 @@ async function main(): Promise<void> {
 
     const cfg = loadConfig();
     const embeddingConfig = cfg.embedding?.provider
-      ? { provider: cfg.embedding.provider, apiKey: cfg.embedding.apiKey }
+      ? { provider: cfg.embedding.provider, ...(cfg.embedding.apiKey != null ? { apiKey: cfg.embedding.apiKey } : {}) }
       : undefined;
     const entryPoints = await resolveEntryPoints(prompt, db, embeddingConfig);
 
