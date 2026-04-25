@@ -5,6 +5,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getDbPath } from '../core/project-identity.js';
 import { loadConfig } from '../core/config.js';
+import { invokeClaude } from '../core/cli-consolidation.js';
 import { getEmbedding, getDimensions } from '../core/embed.js';
 import { initializeSchema } from '../db/migrations.js';
 import { createNode, createEdge, createEpisode } from '../db/graph.js';
@@ -369,27 +370,34 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
     console.log('Skipping embedding pass (no API key configured)');
   }
 
-  if (process.env.ANTHROPIC_API_KEY) {
-    try {
-      const { default: Anthropic } = await import('@anthropic-ai/sdk');
-      const client = new Anthropic();
+  const summaryProvider = config.consolidation.provider ?? 'api';
+  const canSummarize = summaryProvider === 'claude-cli' || Boolean(config.llm.apiKey);
 
+  if (canSummarize) {
+    try {
       const docDescriptions = allNodeIds
         .filter(n => n.text.length > 10)
         .slice(0, 20)
         .map(n => n.text)
         .join('\n');
 
-      const response = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: `Summarize this software project in 2-3 sentences based on these file and doc descriptions:\n${docDescriptions}`,
-        }],
-      });
+      const summaryPrompt = `Summarize this software project in 2-3 sentences based on these file and doc descriptions:\n${docDescriptions}`;
+      const summaryModel = 'claude-sonnet-4-6';
 
-      const summaryText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+      let summaryText: string;
+      if (summaryProvider === 'claude-cli') {
+        summaryText = await invokeClaude(summaryPrompt, summaryModel);
+      } else {
+        const { default: Anthropic } = await import('@anthropic-ai/sdk');
+        const client = new Anthropic({ apiKey: config.llm.apiKey });
+        const response = await client.messages.create({
+          model: summaryModel,
+          max_tokens: 300,
+          messages: [{ role: 'user', content: summaryPrompt }],
+        });
+        summaryText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+      }
+
       if (summaryText) {
         createNode(db, {
           name: 'Project Summary',
@@ -400,13 +408,13 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
           metadata: { source: 'ingest', opusSummary: true },
         });
         nodesCreated++;
-        console.log('Created Opus project summary node');
+        console.log('Created project summary node');
       }
     } catch (err) {
-      process.stderr.write(`Skipping Opus project summary (${err instanceof Error ? err.message : String(err)})\n`);
+      process.stderr.write(`Skipping project summary (${err instanceof Error ? err.message : String(err)})\n`);
     }
   } else {
-    console.log('Skipping Opus project summary (no API key)');
+    console.log('Skipping project summary (no API key configured and provider is not claude-cli)');
   }
 
   console.log(`Ingest complete: ${files.length} files, ${edgesCreated} edges, ${episodesCreated} episodes, ${docsCreated} docs, ${todosCreated} TODOs`);
