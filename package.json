@@ -13,7 +13,8 @@
     "engram": "./dist/cli/index.js"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
