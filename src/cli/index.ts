@@ -7,6 +7,7 @@ import { runConfig } from "./config.js";
 import { runInstall } from "./install.js";
 import { formatStatus, runStatus } from "./status.js";
 import { runUninstall } from "./uninstall.js";
+import { checkForUpdates } from "./update-check.js";
 
 function printUsage(): void {
 	console.log(`Usage: engram <command>
@@ -30,8 +31,23 @@ Getting started:
   3. engram status         Check system health`);
 }
 
+const INTERACTIVE_COMMANDS = new Set([
+	"status",
+	"install",
+	"uninstall",
+	"config",
+	"inspect",
+	"consolidate",
+	"re-embed",
+	"ingest",
+]);
+
 async function main(): Promise<void> {
 	const subcommand = process.argv[2];
+
+	if (subcommand && INTERACTIVE_COMMANDS.has(subcommand)) {
+		checkForUpdates();
+	}
 
 	switch (subcommand) {
 		case "install": {
