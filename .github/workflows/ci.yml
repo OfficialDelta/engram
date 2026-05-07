@@ -30,3 +30,31 @@ jobs:
 
       - name: Test
         run: npm run test
+
+      - name: Pack smoke-test
+        run: |
+          npm pack
+          echo "--- Tarball contents ---"
+          tar -tzf engram-*.tgz | head -40
+          echo "..."
+          echo "File count: $(tar -tzf engram-*.tgz | wc -l)"
+
+          echo "--- Assertions ---"
+          tar -tzf engram-*.tgz | grep -q 'package/dist/cli/index.js'
+          echo "✓ dist/cli/index.js present"
+
+          ! tar -tzf engram-*.tgz | grep -q '__tests__'
+          echo "✓ no __tests__ in tarball"
+
+          ! tar -tzf engram-*.tgz | grep '\.ts$' | grep -v '\.d\.ts$' | grep -q .
+          echo "✓ no .ts source files in tarball"
+
+          echo "--- Fresh install test ---"
+          TMPDIR=$(mktemp -d)
+          cd "$TMPDIR"
+          npm init -y > /dev/null 2>&1
+          npm install "$OLDPWD"/engram-*.tgz
+          npx engram status || true
+          echo "✓ fresh install + engram status did not crash"
+          cd "$OLDPWD"
+          rm -rf "$TMPDIR"
