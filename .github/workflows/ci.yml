@@ -54,7 +54,15 @@ jobs:
           cd "$TMPDIR"
           npm init -y > /dev/null 2>&1
           npm install "$OLDPWD"/engram-*.tgz
-          npx engram status || true
-          echo "✓ fresh install + engram status did not crash"
+          set +e
+          npx engram status 2>stderr.log
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -gt 1 ]; then
+            echo "✗ engram status crashed (exit $EXIT_CODE)"
+            cat stderr.log
+            exit 1
+          fi
+          echo "✓ fresh install + engram status did not crash (exit $EXIT_CODE)"
           cd "$OLDPWD"
           rm -rf "$TMPDIR"
