@@ -1,7 +1,7 @@
 {
 	"name": "engram",
 	"version": "1.0.0",
-	"description": "",
+	"description": "Persistent knowledge graph for AI coding agents",
 	"main": "./dist/index.js",
 	"exports": {
 		".": {
@@ -12,6 +12,18 @@
 	"bin": {
 		"engram": "./dist/cli/index.js"
 	},
+	"files": [
+		"dist",
+		"!dist/__tests__",
+		"!dist/**/*.js.map"
+	],
+	"engines": {
+		"node": ">=20.0.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/OfficialDelta/engram.git"
+	},
 	"scripts": {
 		"build": "tsc",
 		"test": "vitest run",
@@ -20,16 +32,24 @@
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
-		"prepare": "husky"
+		"prepare": "node -e \"try{require('husky')}catch(e){}\"",
+		"prepublishOnly": "npm run build"
 	},
 	"lint-staged": {
 		"*.{ts,js,json}": [
 			"biome check --write --no-errors-on-unmatched"
 		]
 	},
-	"keywords": [],
+	"keywords": [
+		"knowledge-graph",
+		"ai",
+		"coding-agent",
+		"memory",
+		"mcp",
+		"claude"
+	],
 	"author": "",
-	"license": "ISC",
+	"license": "MIT",
 	"type": "module",
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.90.0",
