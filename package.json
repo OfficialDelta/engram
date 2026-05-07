@@ -33,6 +33,7 @@
 		"format": "biome format --write .",
 		"format:check": "biome format .",
 		"prepare": "node -e \"try{require('husky')}catch(e){}\"",
+		"test:e2e:live": "vitest run src/__tests__/e2e-live.test.ts",
 		"prepublishOnly": "npm run build"
 	},
 	"lint-staged": {
