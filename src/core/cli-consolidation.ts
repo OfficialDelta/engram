@@ -1,64 +1,79 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type {
-  EngramEvent,
-  TurnCompleteEvent,
-  WindowSummary,
-  StructuredEpisode,
-  GraphChangeRequest,
-} from '../types.js';
+	EngramEvent,
+	GraphChangeRequest,
+	StructuredEpisode,
+	TurnCompleteEvent,
+	WindowSummary,
+} from "../types.js";
 
 const execFileAsync = promisify(execFile);
 
 const MODEL_MAP: Record<string, string> = {
-  'claude-sonnet-4-6': 'sonnet',
-  'claude-opus-4-6': 'opus',
-  'claude-haiku-4-5': 'haiku',
+	"claude-sonnet-4-6": "sonnet",
+	"claude-opus-4-6": "opus",
+	"claude-haiku-4-5": "haiku",
 };
 
 export function mapModelToCli(fullModel: string): string {
-  return MODEL_MAP[fullModel] ?? fullModel;
+	return MODEL_MAP[fullModel] ?? fullModel;
 }
 
 export function parseCliResponse(stdout: string): string {
-  try {
-    const parsed = JSON.parse(stdout) as { type?: string; result?: unknown };
-    if (typeof parsed.result === 'string') {
-      return parsed.result;
-    }
-    return stdout.trim();
-  } catch {
-    return stdout.trim();
-  }
+	try {
+		const parsed = JSON.parse(stdout) as { type?: string; result?: unknown };
+		if (typeof parsed.result === "string") {
+			return parsed.result;
+		}
+		return stdout.trim();
+	} catch {
+		return stdout.trim();
+	}
 }
 
-export async function invokeClaude(prompt: string, model: string): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync('claude', [
-      '-p', prompt,
-      '--model', mapModelToCli(model),
-      '--bare',
-      '--output-format', 'json',
-    ]);
-    return parseCliResponse(stdout);
-  } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'ENOENT') {
-      throw new Error('Claude CLI not found in PATH. Install Claude Code or switch to consolidation.provider: api');
-    }
-    const e = err as { stderr?: string; code?: number };
-    throw new Error(`Claude CLI failed (exit ${e.code ?? 'unknown'}): ${e.stderr ?? 'no stderr'}`);
-  }
+export async function invokeClaude(
+	prompt: string,
+	model: string,
+): Promise<string> {
+	try {
+		const { stdout } = await execFileAsync("claude", [
+			"-p",
+			prompt,
+			"--model",
+			mapModelToCli(model),
+			"--bare",
+			"--output-format",
+			"json",
+		]);
+		return parseCliResponse(stdout);
+	} catch (err: unknown) {
+		if (
+			err &&
+			typeof err === "object" &&
+			"code" in err &&
+			(err as { code: string }).code === "ENOENT"
+		) {
+			throw new Error(
+				"Claude CLI not found in PATH. Install Claude Code or switch to consolidation.provider: api",
+			);
+		}
+		const e = err as { stderr?: string; code?: number };
+		throw new Error(
+			`Claude CLI failed (exit ${e.code ?? "unknown"}): ${e.stderr ?? "no stderr"}`,
+		);
+	}
 }
 
 export async function cliPass1Summarize(
-  windows: EngramEvent[][],
-  model: string,
+	windows: EngramEvent[][],
+	model: string,
 ): Promise<WindowSummary[]> {
-  const summaries: WindowSummary[] = [];
+	const summaries: WindowSummary[] = [];
 
-  for (let idx = 0; idx < windows.length; idx++) {
-    const windowEvts = windows[idx]!;
-    const prompt = `Analyze these coding agent events and produce a JSON summary.
+	for (let idx = 0; idx < windows.length; idx++) {
+		const windowEvts = windows[idx]!;
+		const prompt = `Analyze these coding agent events and produce a JSON summary.
 
 Events:
 ${JSON.stringify(windowEvts, null, 2)}
@@ -77,53 +92,65 @@ Additional extraction requirements:
 - For each file modified, describe WHAT specifically changed (not just that it was modified)
 - Quote the agent's stated reasons for actions verbatim when available in evidence_snippet fields`;
 
-    const rawText = await invokeClaude(prompt, model);
+		const rawText = await invokeClaude(prompt, model);
 
-    try {
-      const parsed = JSON.parse(rawText) as {
-        summary?: string;
-        filesModified?: string[];
-        decisionsIdentified?: string[];
-        gotchas?: string[];
-        lessonsLearned?: string[];
-        outcome?: string;
-      };
-      summaries.push({
-        windowIndex: idx,
-        eventRange: { start: idx * windowEvts.length, end: idx * windowEvts.length + windowEvts.length - 1 },
-        summary: parsed.summary ?? rawText,
-        filesModified: parsed.filesModified ?? [],
-        decisionsIdentified: parsed.decisionsIdentified ?? [],
-        gotchas: parsed.gotchas ?? [],
-        lessonsLearned: parsed.lessonsLearned ?? [],
-        outcome: (parsed.outcome as WindowSummary['outcome']) ?? 'progress',
-      });
-    } catch {
-      summaries.push({
-        windowIndex: idx,
-        eventRange: { start: 0, end: windowEvts.length - 1 },
-        summary: rawText,
-        filesModified: [],
-        decisionsIdentified: [],
-        outcome: 'progress' as const,
-      });
-    }
-  }
+		try {
+			const parsed = JSON.parse(rawText) as {
+				summary?: string;
+				filesModified?: string[];
+				decisionsIdentified?: string[];
+				gotchas?: string[];
+				lessonsLearned?: string[];
+				outcome?: string;
+			};
+			summaries.push({
+				windowIndex: idx,
+				eventRange: {
+					start: idx * windowEvts.length,
+					end: idx * windowEvts.length + windowEvts.length - 1,
+				},
+				summary: parsed.summary ?? rawText,
+				filesModified: parsed.filesModified ?? [],
+				decisionsIdentified: parsed.decisionsIdentified ?? [],
+				gotchas: parsed.gotchas ?? [],
+				lessonsLearned: parsed.lessonsLearned ?? [],
+				outcome: (parsed.outcome as WindowSummary["outcome"]) ?? "progress",
+			});
+		} catch {
+			summaries.push({
+				windowIndex: idx,
+				eventRange: { start: 0, end: windowEvts.length - 1 },
+				summary: rawText,
+				filesModified: [],
+				decisionsIdentified: [],
+				outcome: "progress" as const,
+			});
+		}
+	}
 
-  return summaries;
+	return summaries;
 }
 
-const VALID_NODE_TYPES = new Set(['concept', 'decision', 'pattern', 'file', 'entity']);
+const VALID_NODE_TYPES = new Set([
+	"concept",
+	"decision",
+	"pattern",
+	"file",
+	"entity",
+]);
 
 export async function cliPass2Extract(
-  summaries: WindowSummary[],
-  model: string,
+	summaries: WindowSummary[],
+	model: string,
 ): Promise<{ episode: StructuredEpisode; changes: GraphChangeRequest }> {
-  const summaryText = summaries
-    .map((s, i) => `Window ${i}: ${s.summary}\nFiles: ${s.filesModified.join(', ')}\nDecisions: ${s.decisionsIdentified.join(', ')}\nGotchas: ${(s.gotchas ?? []).join(', ')}\nLessons: ${(s.lessonsLearned ?? []).join(', ')}\nOutcome: ${s.outcome}`)
-    .join('\n\n');
+	const summaryText = summaries
+		.map(
+			(s, i) =>
+				`Window ${i}: ${s.summary}\nFiles: ${s.filesModified.join(", ")}\nDecisions: ${s.decisionsIdentified.join(", ")}\nGotchas: ${(s.gotchas ?? []).join(", ")}\nLessons: ${(s.lessonsLearned ?? []).join(", ")}\nOutcome: ${s.outcome}`,
+		)
+		.join("\n\n");
 
-  const prompt = `Analyze these session window summaries and extract a structured episode with graph changes.
+	const prompt = `Analyze these session window summaries and extract a structured episode with graph changes.
 
 Decision extraction guidance:
 - Identify both EXPLICIT decisions (agent stated a choice with rationale) and IMPLICIT decisions (agent chose between alternatives without stating the choice).
@@ -159,32 +186,37 @@ Respond with ONLY a valid JSON object matching this exact schema (no other text)
   }
 }`;
 
-  const rawText = await invokeClaude(prompt, model);
-  const result = JSON.parse(rawText) as { episode: StructuredEpisode; changes: GraphChangeRequest };
+	const rawText = await invokeClaude(prompt, model);
+	const result = JSON.parse(rawText) as {
+		episode: StructuredEpisode;
+		changes: GraphChangeRequest;
+	};
 
-  result.changes.nodesToCreate = result.changes.nodesToCreate.filter(
-    (n) => VALID_NODE_TYPES.has(n.nodeType),
-  );
+	result.changes.nodesToCreate = result.changes.nodesToCreate.filter((n) =>
+		VALID_NODE_TYPES.has(n.nodeType),
+	);
 
-  return result;
+	return result;
 }
 
 export async function cliDiscussionConsolidate(
-  events: EngramEvent[],
-  model: string,
+	events: EngramEvent[],
+	model: string,
 ): Promise<{ topics: string[]; decisions: string[]; constraints: string[] }> {
-  const turnEvents = events.filter((e): e is TurnCompleteEvent => e.type === 'turn_complete');
-  const eventSummary = turnEvents
-    .map((e, i) => {
-      const parts = [`Turn ${i + 1}`];
-      if (e.userMessage) parts.push(`User: ${e.userMessage}`);
-      if (e.agentSummary) parts.push(`Agent: ${e.agentSummary}`);
-      return parts.join('\n');
-    })
-    .join('\n\n');
+	const turnEvents = events.filter(
+		(e): e is TurnCompleteEvent => e.type === "turn_complete",
+	);
+	const eventSummary = turnEvents
+		.map((e, i) => {
+			const parts = [`Turn ${i + 1}`];
+			if (e.userMessage) parts.push(`User: ${e.userMessage}`);
+			if (e.agentSummary) parts.push(`Agent: ${e.agentSummary}`);
+			return parts.join("\n");
+		})
+		.join("\n\n");
 
-  try {
-    const prompt = `Analyze this discussion session and extract structured information.
+	try {
+		const prompt = `Analyze this discussion session and extract structured information.
 
 Discussion turns:
 ${eventSummary}
@@ -194,22 +226,22 @@ Return a JSON object with:
 - decisions: array of decisions stated during the discussion
 - constraints: array of constraints or requirements mentioned`;
 
-    const rawText = await invokeClaude(prompt, model);
-    try {
-      const parsed = JSON.parse(rawText) as {
-        topics?: string[];
-        decisions?: string[];
-        constraints?: string[];
-      };
-      return {
-        topics: parsed.topics ?? [],
-        decisions: parsed.decisions ?? [],
-        constraints: parsed.constraints ?? [],
-      };
-    } catch {
-      return { topics: [], decisions: [], constraints: [] };
-    }
-  } catch {
-    return { topics: [], decisions: [], constraints: [] };
-  }
+		const rawText = await invokeClaude(prompt, model);
+		try {
+			const parsed = JSON.parse(rawText) as {
+				topics?: string[];
+				decisions?: string[];
+				constraints?: string[];
+			};
+			return {
+				topics: parsed.topics ?? [],
+				decisions: parsed.decisions ?? [],
+				constraints: parsed.constraints ?? [],
+			};
+		} catch {
+			return { topics: [], decisions: [], constraints: [] };
+		}
+	} catch {
+		return { topics: [], decisions: [], constraints: [] };
+	}
 }

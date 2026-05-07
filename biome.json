@@ -7,7 +7,9 @@
 			"**/*.json",
 			"!dist",
 			"!node_modules",
-			"!coverage"
+			"!coverage",
+			"!.bg-shell",
+			"!.gsd"
 		]
 	},
 	"formatter": {

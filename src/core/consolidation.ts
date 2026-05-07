@@ -1,56 +1,72 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { type ChildProcess, spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { storeEmbedding } from "../db/embeddings.js";
+import {
+	createEdge,
+	createEpisode,
+	createNode,
+	getNode,
+	updateNode,
+} from "../db/graph.js";
+import type { DatabaseType } from "../db/migrations.js";
+import { initializeSchema } from "../db/migrations.js";
 import type {
-  EngramEvent,
-  TurnCompleteEvent,
-  WindowSummary,
-  StructuredEpisode,
-  GraphChangeRequest,
-  ConsolidationConfig,
-  GraphNode,
-} from '../types.js';
-import type { DatabaseType } from '../db/migrations.js';
-import { initializeSchema } from '../db/migrations.js';
-import { cliPass1Summarize, cliPass2Extract, cliDiscussionConsolidate } from './cli-consolidation.js';
-import { getSessionEvents } from './event-stream.js';
-import { computeStrength } from './strength.js';
-import { resolveEntity, shouldUpdateDescription } from './entity-resolution.js';
-import { getEmbedding, getDimensions } from './embed.js';
-import { createNode, updateNode, createEdge, createEpisode, getNode } from '../db/graph.js';
-import { storeEmbedding } from '../db/embeddings.js';
+	ConsolidationConfig,
+	EngramEvent,
+	GraphChangeRequest,
+	GraphNode,
+	StructuredEpisode,
+	TurnCompleteEvent,
+	WindowSummary,
+} from "../types.js";
+import {
+	cliDiscussionConsolidate,
+	cliPass1Summarize,
+	cliPass2Extract,
+} from "./cli-consolidation.js";
+import { getDimensions, getEmbedding } from "./embed.js";
+import { resolveEntity, shouldUpdateDescription } from "./entity-resolution.js";
+import { getSessionEvents } from "./event-stream.js";
+import { computeStrength } from "./strength.js";
 
 export function windowEvents(
-  events: EngramEvent[],
-  windowSize: number,
-  overlap: number,
+	events: EngramEvent[],
+	windowSize: number,
+	overlap: number,
 ): EngramEvent[][] {
-  if (events.length === 0) return [];
-  if (events.length <= windowSize) return [events];
+	if (events.length === 0) return [];
+	if (events.length <= windowSize) return [events];
 
-  const step = windowSize - overlap;
-  const windows: EngramEvent[][] = [];
-  for (let i = 0; i < events.length; i += step) {
-    windows.push(events.slice(i, i + windowSize));
-  }
-  return windows;
+	const step = windowSize - overlap;
+	const windows: EngramEvent[][] = [];
+	for (let i = 0; i < events.length; i += step) {
+		windows.push(events.slice(i, i + windowSize));
+	}
+	return windows;
 }
 
 export async function pass1Summarize(
-  windows: EngramEvent[][],
-  client: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> } },
-  model: string,
+	windows: EngramEvent[][],
+	client: {
+		messages: {
+			create: (
+				params: unknown,
+			) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+		};
+	},
+	model: string,
 ): Promise<WindowSummary[]> {
-  return Promise.all(
-    windows.map(async (windowEvts, idx) => {
-      const response = await client.messages.create({
-        model,
-        max_tokens: 500,
-        messages: [
-          {
-            role: 'user',
-            content: `Analyze these coding agent events and produce a JSON summary.
+	return Promise.all(
+		windows.map(async (windowEvts, idx) => {
+			const response = await client.messages.create({
+				model,
+				max_tokens: 500,
+				messages: [
+					{
+						role: "user",
+						content: `Analyze these coding agent events and produce a JSON summary.
 
 Events:
 ${JSON.stringify(windowEvts, null, 2)}
@@ -68,62 +84,85 @@ Additional extraction requirements:
 - Include concrete values: config settings, thresholds, version numbers, counts
 - For each file modified, describe WHAT specifically changed (not just that it was modified)
 - Quote the agent's stated reasons for actions verbatim when available in evidence_snippet fields`,
-          },
-        ],
-      });
+					},
+				],
+			});
 
-      const rawText = response.content[0]?.text ?? '';
-      try {
-        const parsed = JSON.parse(rawText) as {
-          summary?: string;
-          filesModified?: string[];
-          decisionsIdentified?: string[];
-          gotchas?: string[];
-          lessonsLearned?: string[];
-          outcome?: string;
-        };
-        return {
-          windowIndex: idx,
-          eventRange: { start: idx * (windowEvts.length), end: idx * (windowEvts.length) + windowEvts.length - 1 },
-          summary: parsed.summary ?? rawText,
-          filesModified: parsed.filesModified ?? [],
-          decisionsIdentified: parsed.decisionsIdentified ?? [],
-          gotchas: parsed.gotchas ?? [],
-          lessonsLearned: parsed.lessonsLearned ?? [],
-          outcome: (parsed.outcome as WindowSummary['outcome']) ?? 'progress',
-        };
-      } catch {
-        return {
-          windowIndex: idx,
-          eventRange: { start: 0, end: windowEvts.length - 1 },
-          summary: rawText,
-          filesModified: [],
-          decisionsIdentified: [],
-          outcome: 'progress' as const,
-        };
-      }
-    }),
-  );
+			const rawText = response.content[0]?.text ?? "";
+			try {
+				const parsed = JSON.parse(rawText) as {
+					summary?: string;
+					filesModified?: string[];
+					decisionsIdentified?: string[];
+					gotchas?: string[];
+					lessonsLearned?: string[];
+					outcome?: string;
+				};
+				return {
+					windowIndex: idx,
+					eventRange: {
+						start: idx * windowEvts.length,
+						end: idx * windowEvts.length + windowEvts.length - 1,
+					},
+					summary: parsed.summary ?? rawText,
+					filesModified: parsed.filesModified ?? [],
+					decisionsIdentified: parsed.decisionsIdentified ?? [],
+					gotchas: parsed.gotchas ?? [],
+					lessonsLearned: parsed.lessonsLearned ?? [],
+					outcome: (parsed.outcome as WindowSummary["outcome"]) ?? "progress",
+				};
+			} catch {
+				return {
+					windowIndex: idx,
+					eventRange: { start: 0, end: windowEvts.length - 1 },
+					summary: rawText,
+					filesModified: [],
+					decisionsIdentified: [],
+					outcome: "progress" as const,
+				};
+			}
+		}),
+	);
 }
 
-const VALID_NODE_TYPES = new Set(['concept', 'decision', 'pattern', 'file', 'entity']);
+const VALID_NODE_TYPES = new Set([
+	"concept",
+	"decision",
+	"pattern",
+	"file",
+	"entity",
+]);
 
 export async function pass2Extract(
-  summaries: WindowSummary[],
-  client: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; id?: string; name?: string; input?: unknown }> }> } },
-  model: string,
+	summaries: WindowSummary[],
+	client: {
+		messages: {
+			create: (params: unknown) => Promise<{
+				content: Array<{
+					type: string;
+					id?: string;
+					name?: string;
+					input?: unknown;
+				}>;
+			}>;
+		};
+	},
+	model: string,
 ): Promise<{ episode: StructuredEpisode; changes: GraphChangeRequest }> {
-  const summaryText = summaries
-    .map((s, i) => `Window ${i}: ${s.summary}\nFiles: ${s.filesModified.join(', ')}\nDecisions: ${s.decisionsIdentified.join(', ')}\nGotchas: ${(s.gotchas ?? []).join(', ')}\nLessons: ${(s.lessonsLearned ?? []).join(', ')}\nOutcome: ${s.outcome}`)
-    .join('\n\n');
+	const summaryText = summaries
+		.map(
+			(s, i) =>
+				`Window ${i}: ${s.summary}\nFiles: ${s.filesModified.join(", ")}\nDecisions: ${s.decisionsIdentified.join(", ")}\nGotchas: ${(s.gotchas ?? []).join(", ")}\nLessons: ${(s.lessonsLearned ?? []).join(", ")}\nOutcome: ${s.outcome}`,
+		)
+		.join("\n\n");
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: 'user',
-        content: `Analyze these session window summaries and extract a structured episode with graph changes.
+	const response = await client.messages.create({
+		model,
+		max_tokens: 4096,
+		messages: [
+			{
+				role: "user",
+				content: `Analyze these session window summaries and extract a structured episode with graph changes.
 
 Decision extraction guidance:
 - Identify both EXPLICIT decisions (agent stated a choice with rationale) and IMPLICIT decisions (agent chose between alternatives without stating the choice).
@@ -141,290 +180,389 @@ Error extraction guidance:
 - Identify bugs that are likely to recur — bugs caused by a false assumption not captured in code (not transient typos or tool failures). Prefix the rootCause of such errors with "[recurring-risk]".
 
 ${summaryText}`,
-      },
-    ],
-    tools: [
-      {
-        name: 'extract_episode',
-        description: 'Extract structured episode and graph changes from session summaries',
-        input_schema: {
-          type: 'object',
-          properties: {
-            episode: {
-              type: 'object',
-              properties: {
-                goal: { type: 'string' },
-                approach: { type: 'string' },
-                outcome: { type: 'string', enum: ['success', 'partial', 'failure'] },
-                discoveries: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      content: { type: 'string' },
-                      evidence: { type: 'string' },
-                      confidence: { type: 'number' },
-                    },
-                    required: ['content', 'evidence', 'confidence'],
-                  },
-                },
-                decisions: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      content: { type: 'string' },
-                      rationale: { type: 'string' },
-                      isImplicit: { type: 'boolean' },
-                    },
-                    required: ['content', 'rationale', 'isImplicit'],
-                  },
-                },
-                errors: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      description: { type: 'string' },
-                      rootCause: { type: 'string' },
-                      resolution: { type: 'string' },
-                    },
-                    required: ['description', 'rootCause', 'resolution'],
-                  },
-                },
-              },
-              required: ['goal', 'approach', 'outcome', 'discoveries', 'decisions', 'errors'],
-            },
-            changes: {
-              type: 'object',
-              properties: {
-                nodesToCreate: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      name: { type: 'string' },
-                      nodeType: { type: 'string', enum: ['concept', 'decision', 'pattern', 'file', 'entity'] },
-                      description: { type: 'string' },
-                      affectedFiles: { type: 'array', items: { type: 'string' } },
-                      causallyImportant: { type: 'boolean' },
-                    },
-                    required: ['name', 'nodeType', 'description', 'affectedFiles', 'causallyImportant'],
-                  },
-                },
-                nodesToUpdate: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      existingNodeId: { type: 'string' },
-                      updates: { type: 'object' },
-                    },
-                    required: ['existingNodeId', 'updates'],
-                  },
-                },
-                edgesToCreate: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      sourceNodeName: { type: 'string' },
-                      targetNodeName: { type: 'string' },
-                      relationshipType: { type: 'string' },
-                      weight: { type: 'number' },
-                    },
-                    required: ['sourceNodeName', 'targetNodeName', 'relationshipType', 'weight'],
-                  },
-                },
-              },
-              required: ['nodesToCreate', 'nodesToUpdate', 'edgesToCreate'],
-            },
-          },
-          required: ['episode', 'changes'],
-        },
-      },
-    ],
-    tool_choice: { type: 'tool', name: 'extract_episode' },
-  });
+			},
+		],
+		tools: [
+			{
+				name: "extract_episode",
+				description:
+					"Extract structured episode and graph changes from session summaries",
+				input_schema: {
+					type: "object",
+					properties: {
+						episode: {
+							type: "object",
+							properties: {
+								goal: { type: "string" },
+								approach: { type: "string" },
+								outcome: {
+									type: "string",
+									enum: ["success", "partial", "failure"],
+								},
+								discoveries: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											content: { type: "string" },
+											evidence: { type: "string" },
+											confidence: { type: "number" },
+										},
+										required: ["content", "evidence", "confidence"],
+									},
+								},
+								decisions: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											content: { type: "string" },
+											rationale: { type: "string" },
+											isImplicit: { type: "boolean" },
+										},
+										required: ["content", "rationale", "isImplicit"],
+									},
+								},
+								errors: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											description: { type: "string" },
+											rootCause: { type: "string" },
+											resolution: { type: "string" },
+										},
+										required: ["description", "rootCause", "resolution"],
+									},
+								},
+							},
+							required: [
+								"goal",
+								"approach",
+								"outcome",
+								"discoveries",
+								"decisions",
+								"errors",
+							],
+						},
+						changes: {
+							type: "object",
+							properties: {
+								nodesToCreate: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											name: { type: "string" },
+											nodeType: {
+												type: "string",
+												enum: [
+													"concept",
+													"decision",
+													"pattern",
+													"file",
+													"entity",
+												],
+											},
+											description: { type: "string" },
+											affectedFiles: {
+												type: "array",
+												items: { type: "string" },
+											},
+											causallyImportant: { type: "boolean" },
+										},
+										required: [
+											"name",
+											"nodeType",
+											"description",
+											"affectedFiles",
+											"causallyImportant",
+										],
+									},
+								},
+								nodesToUpdate: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											existingNodeId: { type: "string" },
+											updates: { type: "object" },
+										},
+										required: ["existingNodeId", "updates"],
+									},
+								},
+								edgesToCreate: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											sourceNodeName: { type: "string" },
+											targetNodeName: { type: "string" },
+											relationshipType: { type: "string" },
+											weight: { type: "number" },
+										},
+										required: [
+											"sourceNodeName",
+											"targetNodeName",
+											"relationshipType",
+											"weight",
+										],
+									},
+								},
+							},
+							required: ["nodesToCreate", "nodesToUpdate", "edgesToCreate"],
+						},
+					},
+					required: ["episode", "changes"],
+				},
+			},
+		],
+		tool_choice: { type: "tool", name: "extract_episode" },
+	});
 
-  const toolBlock = response.content.find((b) => b.type === 'tool_use');
-  if (!toolBlock) {
-    throw new Error('Pass 2: no tool_use block in response');
-  }
+	const toolBlock = response.content.find((b) => b.type === "tool_use");
+	if (!toolBlock) {
+		throw new Error("Pass 2: no tool_use block in response");
+	}
 
-  const result = toolBlock.input as { episode: StructuredEpisode; changes: GraphChangeRequest };
+	const result = toolBlock.input as {
+		episode: StructuredEpisode;
+		changes: GraphChangeRequest;
+	};
 
-  result.changes.nodesToCreate = result.changes.nodesToCreate.filter(
-    (n) => VALID_NODE_TYPES.has(n.nodeType),
-  );
+	result.changes.nodesToCreate = result.changes.nodesToCreate.filter((n) =>
+		VALID_NODE_TYPES.has(n.nodeType),
+	);
 
-  return result;
+	return result;
 }
 
 export async function applyGraphChanges(
-  db: DatabaseType,
-  changes: GraphChangeRequest,
-  sessionId: string,
-  episodeId: string,
-  episodeOutcome: 'success' | 'partial' | 'failure',
-  embeddingConfig?: { provider?: string; apiKey?: string },
+	db: DatabaseType,
+	changes: GraphChangeRequest,
+	_sessionId: string,
+	episodeId: string,
+	episodeOutcome: "success" | "partial" | "failure",
+	embeddingConfig?: { provider?: string; apiKey?: string },
 ): Promise<Map<string, string>> {
-  const nodeIdMap = new Map<string, string>();
+	const nodeIdMap = new Map<string, string>();
 
-  type PreparedOp =
-    | { kind: 'merge'; name: string; existingNodeId: string; node: GraphChangeRequest['nodesToCreate'][number]; updateDescription: boolean }
-    | { kind: 'create_child'; name: string; existingNodeId: string; node: GraphChangeRequest['nodesToCreate'][number]; embedding?: number[] }
-    | { kind: 'create_new'; name: string; node: GraphChangeRequest['nodesToCreate'][number]; embedding?: number[] };
+	type PreparedOp =
+		| {
+				kind: "merge";
+				name: string;
+				existingNodeId: string;
+				node: GraphChangeRequest["nodesToCreate"][number];
+				updateDescription: boolean;
+		  }
+		| {
+				kind: "create_child";
+				name: string;
+				existingNodeId: string;
+				node: GraphChangeRequest["nodesToCreate"][number];
+				embedding?: number[];
+		  }
+		| {
+				kind: "create_new";
+				name: string;
+				node: GraphChangeRequest["nodesToCreate"][number];
+				embedding?: number[];
+		  };
 
-  const ops: PreparedOp[] = [];
+	const ops: PreparedOp[] = [];
 
-  for (const node of changes.nodesToCreate) {
-    const resolution = await resolveEntity(db, node.name, node.description, embeddingConfig);
+	for (const node of changes.nodesToCreate) {
+		const resolution = await resolveEntity(
+			db,
+			node.name,
+			node.description,
+			embeddingConfig,
+		);
 
-    if (resolution.action === 'merge' && resolution.existingNodeId) {
-      const existing = getNode(db, resolution.existingNodeId);
-      const shouldUpdate = existing
-        ? await shouldUpdateDescription(existing.description, node.description, embeddingConfig)
-        : true;
-      ops.push({ kind: 'merge', name: node.name, existingNodeId: resolution.existingNodeId, node, updateDescription: shouldUpdate });
-    } else if (resolution.action === 'create_child' && resolution.existingNodeId) {
-      ops.push({ kind: 'create_child', name: node.name, existingNodeId: resolution.existingNodeId, node });
-    } else {
-      ops.push({ kind: 'create_new', name: node.name, node });
-    }
-  }
+		if (resolution.action === "merge" && resolution.existingNodeId) {
+			const existing = getNode(db, resolution.existingNodeId);
+			const shouldUpdate = existing
+				? await shouldUpdateDescription(
+						existing.description,
+						node.description,
+						embeddingConfig,
+					)
+				: true;
+			ops.push({
+				kind: "merge",
+				name: node.name,
+				existingNodeId: resolution.existingNodeId,
+				node,
+				updateDescription: shouldUpdate,
+			});
+		} else if (
+			resolution.action === "create_child" &&
+			resolution.existingNodeId
+		) {
+			ops.push({
+				kind: "create_child",
+				name: node.name,
+				existingNodeId: resolution.existingNodeId,
+				node,
+			});
+		} else {
+			ops.push({ kind: "create_new", name: node.name, node });
+		}
+	}
 
-  const needsEmbedding = ops.filter(
-    (op): op is Exclude<PreparedOp, { kind: 'merge' }> => op.kind !== 'merge'
-  );
-  if (needsEmbedding.length > 0) {
-    const texts = needsEmbedding.map(op => op.node.name + ' ' + op.node.description);
-    const embeddings = await getEmbedding(texts, embeddingConfig);
-    needsEmbedding.forEach((op, i) => { op.embedding = embeddings[i]!; });
-  }
+	const needsEmbedding = ops.filter(
+		(op): op is Exclude<PreparedOp, { kind: "merge" }> => op.kind !== "merge",
+	);
+	if (needsEmbedding.length > 0) {
+		const texts = needsEmbedding.map(
+			(op) => `${op.node.name} ${op.node.description}`,
+		);
+		const embeddings = await getEmbedding(texts, embeddingConfig);
+		needsEmbedding.forEach((op, i) => {
+			op.embedding = embeddings[i]!;
+		});
+	}
 
-  db.transaction(() => {
-    for (const op of ops) {
-      if (op.kind === 'merge') {
-        const existing = getNode(db, op.existingNodeId);
-        if (existing) {
-          const meta = existing.metadata as Record<string, unknown>;
-          const sourceEpisodes = (meta.sourceEpisodes as string[] | undefined) ?? [];
-          sourceEpisodes.push(episodeId);
-          const prevSuccessful = (meta.successfulEpisodeCount as number | undefined) ?? (sourceEpisodes.length - 1);
-          const successfulEpisodeCount = prevSuccessful + (episodeOutcome === 'success' ? 1 : 0);
-          const newMeta = { ...meta, sourceEpisodes, successfulEpisodeCount };
-          updateNode(db, op.existingNodeId, {
-            ...(op.updateDescription
-              ? { description: existing.description + '; ' + op.node.description }
-              : {}),
-            metadata: newMeta,
-          });
-          const newStrength = computeStrength({
-            sourceEpisodeCount: sourceEpisodes.length,
-            sessionsWithoutReinforcement: 0,
-            successfulEpisodes: successfulEpisodeCount,
-            totalEpisodes: sourceEpisodes.length,
-            causallyImportant: op.node.causallyImportant,
-          });
-          updateNode(db, op.existingNodeId, { strength: newStrength });
-        }
-        nodeIdMap.set(op.name, op.existingNodeId);
-      } else if (op.kind === 'create_child') {
-        const newNode = createNode(db, {
-          name: op.node.name,
-          nodeType: op.node.nodeType as GraphNode['nodeType'],
-          description: op.node.description,
-          affectedFiles: op.node.affectedFiles,
-          strength: computeStrength({
-            sourceEpisodeCount: 1,
-            sessionsWithoutReinforcement: 0,
-            successfulEpisodes: episodeOutcome === 'success' ? 1 : 0,
-            totalEpisodes: episodeOutcome === 'success' ? 1 : 0,
-            causallyImportant: op.node.causallyImportant,
-          }),
-          metadata: { sourceEpisodes: [episodeId] },
-        });
-        storeEmbedding(db, newNode.id, op.embedding!);
-        createEdge(db, {
-          sourceNodeId: newNode.id,
-          targetNodeId: op.existingNodeId,
-          relationshipType: 'version_of',
-          weight: 0.8,
-          metadata: {},
-        });
-        nodeIdMap.set(op.name, newNode.id);
-      } else {
-        const newNode = createNode(db, {
-          name: op.node.name,
-          nodeType: op.node.nodeType as GraphNode['nodeType'],
-          description: op.node.description,
-          affectedFiles: op.node.affectedFiles,
-          strength: computeStrength({
-            sourceEpisodeCount: 1,
-            sessionsWithoutReinforcement: 0,
-            successfulEpisodes: episodeOutcome === 'success' ? 1 : 0,
-            totalEpisodes: episodeOutcome === 'success' ? 1 : 0,
-            causallyImportant: op.node.causallyImportant,
-          }),
-          metadata: { sourceEpisodes: [episodeId] },
-        });
-        storeEmbedding(db, newNode.id, op.embedding!);
-        nodeIdMap.set(op.name, newNode.id);
-      }
-    }
+	db.transaction(() => {
+		for (const op of ops) {
+			if (op.kind === "merge") {
+				const existing = getNode(db, op.existingNodeId);
+				if (existing) {
+					const meta = existing.metadata as Record<string, unknown>;
+					const sourceEpisodes =
+						(meta.sourceEpisodes as string[] | undefined) ?? [];
+					sourceEpisodes.push(episodeId);
+					const prevSuccessful =
+						(meta.successfulEpisodeCount as number | undefined) ??
+						sourceEpisodes.length - 1;
+					const successfulEpisodeCount =
+						prevSuccessful + (episodeOutcome === "success" ? 1 : 0);
+					const newMeta = { ...meta, sourceEpisodes, successfulEpisodeCount };
+					updateNode(db, op.existingNodeId, {
+						...(op.updateDescription
+							? {
+									description: `${existing.description}; ${op.node.description}`,
+								}
+							: {}),
+						metadata: newMeta,
+					});
+					const newStrength = computeStrength({
+						sourceEpisodeCount: sourceEpisodes.length,
+						sessionsWithoutReinforcement: 0,
+						successfulEpisodes: successfulEpisodeCount,
+						totalEpisodes: sourceEpisodes.length,
+						causallyImportant: op.node.causallyImportant,
+					});
+					updateNode(db, op.existingNodeId, { strength: newStrength });
+				}
+				nodeIdMap.set(op.name, op.existingNodeId);
+			} else if (op.kind === "create_child") {
+				const newNode = createNode(db, {
+					name: op.node.name,
+					nodeType: op.node.nodeType as GraphNode["nodeType"],
+					description: op.node.description,
+					affectedFiles: op.node.affectedFiles,
+					strength: computeStrength({
+						sourceEpisodeCount: 1,
+						sessionsWithoutReinforcement: 0,
+						successfulEpisodes: episodeOutcome === "success" ? 1 : 0,
+						totalEpisodes: episodeOutcome === "success" ? 1 : 0,
+						causallyImportant: op.node.causallyImportant,
+					}),
+					metadata: { sourceEpisodes: [episodeId] },
+				});
+				storeEmbedding(db, newNode.id, op.embedding!);
+				createEdge(db, {
+					sourceNodeId: newNode.id,
+					targetNodeId: op.existingNodeId,
+					relationshipType: "version_of",
+					weight: 0.8,
+					metadata: {},
+				});
+				nodeIdMap.set(op.name, newNode.id);
+			} else {
+				const newNode = createNode(db, {
+					name: op.node.name,
+					nodeType: op.node.nodeType as GraphNode["nodeType"],
+					description: op.node.description,
+					affectedFiles: op.node.affectedFiles,
+					strength: computeStrength({
+						sourceEpisodeCount: 1,
+						sessionsWithoutReinforcement: 0,
+						successfulEpisodes: episodeOutcome === "success" ? 1 : 0,
+						totalEpisodes: episodeOutcome === "success" ? 1 : 0,
+						causallyImportant: op.node.causallyImportant,
+					}),
+					metadata: { sourceEpisodes: [episodeId] },
+				});
+				storeEmbedding(db, newNode.id, op.embedding!);
+				nodeIdMap.set(op.name, newNode.id);
+			}
+		}
 
-    for (const edge of changes.edgesToCreate) {
-      const sourceId = nodeIdMap.get(edge.sourceNodeName);
-      const targetId = nodeIdMap.get(edge.targetNodeName);
-      if (sourceId && targetId) {
-        createEdge(db, {
-          sourceNodeId: sourceId,
-          targetNodeId: targetId,
-          relationshipType: edge.relationshipType,
-          weight: edge.weight,
-          metadata: {},
-        });
-      }
-    }
-  })();
+		for (const edge of changes.edgesToCreate) {
+			const sourceId = nodeIdMap.get(edge.sourceNodeName);
+			const targetId = nodeIdMap.get(edge.targetNodeName);
+			if (sourceId && targetId) {
+				createEdge(db, {
+					sourceNodeId: sourceId,
+					targetNodeId: targetId,
+					relationshipType: edge.relationshipType,
+					weight: edge.weight,
+					metadata: {},
+				});
+			}
+		}
+	})();
 
-  return nodeIdMap;
+	return nodeIdMap;
 }
 
-export function shouldUseDiscussionConsolidation(events: EngramEvent[]): boolean {
-  return (
-    events.length > 0 &&
-    events.length < 3 &&
-    events.every(
-      (e) => e.type === 'turn_complete' && (e as TurnCompleteEvent).toolCallCount === 0,
-    )
-  );
+export function shouldUseDiscussionConsolidation(
+	events: EngramEvent[],
+): boolean {
+	return (
+		events.length > 0 &&
+		events.length < 3 &&
+		events.every(
+			(e) =>
+				e.type === "turn_complete" &&
+				(e as TurnCompleteEvent).toolCallCount === 0,
+		)
+	);
 }
 
 export async function discussionConsolidate(
-  events: EngramEvent[],
-  client: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> } },
-  model: string,
+	events: EngramEvent[],
+	client: {
+		messages: {
+			create: (
+				params: unknown,
+			) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+		};
+	},
+	model: string,
 ): Promise<{ topics: string[]; decisions: string[]; constraints: string[] }> {
-  const turnEvents = events.filter((e): e is TurnCompleteEvent => e.type === 'turn_complete');
-  const eventSummary = turnEvents
-    .map((e, i) => {
-      const parts = [`Turn ${i + 1}`];
-      if (e.userMessage) parts.push(`User: ${e.userMessage}`);
-      if (e.agentSummary) parts.push(`Agent: ${e.agentSummary}`);
-      return parts.join('\n');
-    })
-    .join('\n\n');
+	const turnEvents = events.filter(
+		(e): e is TurnCompleteEvent => e.type === "turn_complete",
+	);
+	const eventSummary = turnEvents
+		.map((e, i) => {
+			const parts = [`Turn ${i + 1}`];
+			if (e.userMessage) parts.push(`User: ${e.userMessage}`);
+			if (e.agentSummary) parts.push(`Agent: ${e.agentSummary}`);
+			return parts.join("\n");
+		})
+		.join("\n\n");
 
-  try {
-    const response = await client.messages.create({
-      model,
-      max_tokens: 300,
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze this discussion session and extract structured information.
+	try {
+		const response = await client.messages.create({
+			model,
+			max_tokens: 300,
+			messages: [
+				{
+					role: "user",
+					content: `Analyze this discussion session and extract structured information.
 
 Discussion turns:
 ${eventSummary}
@@ -433,237 +571,319 @@ Return a JSON object with:
 - topics: array of topics discussed
 - decisions: array of decisions stated during the discussion
 - constraints: array of constraints or requirements mentioned`,
-        },
-      ],
-    });
+				},
+			],
+		});
 
-    const rawText = response.content[0]?.text ?? '';
-    try {
-      const parsed = JSON.parse(rawText) as {
-        topics?: string[];
-        decisions?: string[];
-        constraints?: string[];
-      };
-      return {
-        topics: parsed.topics ?? [],
-        decisions: parsed.decisions ?? [],
-        constraints: parsed.constraints ?? [],
-      };
-    } catch {
-      return { topics: [], decisions: [], constraints: [] };
-    }
-  } catch {
-    return { topics: [], decisions: [], constraints: [] };
-  }
+		const rawText = response.content[0]?.text ?? "";
+		try {
+			const parsed = JSON.parse(rawText) as {
+				topics?: string[];
+				decisions?: string[];
+				constraints?: string[];
+			};
+			return {
+				topics: parsed.topics ?? [],
+				decisions: parsed.decisions ?? [],
+				constraints: parsed.constraints ?? [],
+			};
+		} catch {
+			return { topics: [], decisions: [], constraints: [] };
+		}
+	} catch {
+		return { topics: [], decisions: [], constraints: [] };
+	}
 }
 
 export async function consolidateSession(
-  sessionId: string,
-  dbPath: string,
-  dataDir: string,
-  config?: ConsolidationConfig,
+	sessionId: string,
+	dbPath: string,
+	dataDir: string,
+	config?: ConsolidationConfig,
 ): Promise<void> {
-  const windowSize = config?.windowSize ?? 10;
-  const windowOverlap = config?.windowOverlap ?? 3;
-  const pass1Model = config?.pass1Model ?? 'claude-sonnet-4-6';
-  const pass2Model = config?.pass2Model ?? 'claude-opus-4-6';
-  const provider = config?.consolidationProvider ?? 'api';
+	const windowSize = config?.windowSize ?? 10;
+	const windowOverlap = config?.windowOverlap ?? 3;
+	const pass1Model = config?.pass1Model ?? "claude-sonnet-4-6";
+	const pass2Model = config?.pass2Model ?? "claude-opus-4-6";
+	const provider = config?.consolidationProvider ?? "api";
 
-  const client = provider === 'api'
-    ? ((config?.client as Parameters<typeof pass1Summarize>[1]) ??
-      new (await import('@anthropic-ai/sdk')).default())
-    : undefined;
+	const client =
+		provider === "api"
+			? ((config?.client as Parameters<typeof pass1Summarize>[1]) ??
+				new (await import("@anthropic-ai/sdk")).default())
+			: undefined;
 
-  let events = getSessionEvents(sessionId, dataDir);
-  if (config?.sinceTimestamp) {
-    events = events.filter((e) => e.timestamp > config.sinceTimestamp!);
-  }
-  if (events.length === 0) return;
+	let events = getSessionEvents(sessionId, dataDir);
+	if (config?.sinceTimestamp) {
+		events = events.filter((e) => e.timestamp > config.sinceTimestamp!);
+	}
+	if (events.length === 0) return;
 
-  if (shouldUseDiscussionConsolidation(events)) {
-    const discussionModel = 'claude-haiku-4-5';
-    const result = provider === 'claude-cli'
-      ? await cliDiscussionConsolidate(events, discussionModel)
-      : await discussionConsolidate(events, client!, discussionModel);
-    const embProv = config?.embeddingConfig?.provider ?? 'voyage-3-lite';
-    const db = initializeSchema(dbPath, getDimensions(embProv), embProv);
-    try {
-      const episodeRecord = createEpisode(db, {
-        sessionId,
-        summary: `Discussion: ${result.topics.join(', ')}`,
-        nodesInvolved: [],
-        timestamp: new Date().toISOString(),
-        metadata: result as unknown as Record<string, unknown>,
-      });
-      fs.mkdirSync(path.join(dataDir, 'episodes'), { recursive: true });
-      fs.writeFileSync(
-        path.join(dataDir, 'episodes', sessionId + '.episode.json'),
-        JSON.stringify({ episodeId: episodeRecord.id, completedAt: new Date().toISOString(), type: 'discussion' }),
-      );
-    } finally {
-      db.close();
-    }
-    return;
-  }
+	if (shouldUseDiscussionConsolidation(events)) {
+		const discussionModel = "claude-haiku-4-5";
+		const result =
+			provider === "claude-cli"
+				? await cliDiscussionConsolidate(events, discussionModel)
+				: await discussionConsolidate(events, client!, discussionModel);
+		const embProv = config?.embeddingConfig?.provider ?? "voyage-3-lite";
+		const db = initializeSchema(dbPath, getDimensions(embProv), embProv);
+		try {
+			const episodeRecord = createEpisode(db, {
+				sessionId,
+				summary: `Discussion: ${result.topics.join(", ")}`,
+				nodesInvolved: [],
+				timestamp: new Date().toISOString(),
+				metadata: result as unknown as Record<string, unknown>,
+			});
+			fs.mkdirSync(path.join(dataDir, "episodes"), { recursive: true });
+			fs.writeFileSync(
+				path.join(dataDir, "episodes", `${sessionId}.episode.json`),
+				JSON.stringify({
+					episodeId: episodeRecord.id,
+					completedAt: new Date().toISOString(),
+					type: "discussion",
+				}),
+			);
+		} finally {
+			db.close();
+		}
+		return;
+	}
 
-  const embeddingProvider = config?.embeddingConfig?.provider ?? 'voyage-3-lite';
-  const db = initializeSchema(dbPath, getDimensions(embeddingProvider), embeddingProvider);
+	const embeddingProvider =
+		config?.embeddingConfig?.provider ?? "voyage-3-lite";
+	const db = initializeSchema(
+		dbPath,
+		getDimensions(embeddingProvider),
+		embeddingProvider,
+	);
 
-  try {
-    const windows = windowEvents(events, windowSize, windowOverlap);
-    const summaries = provider === 'claude-cli'
-      ? await cliPass1Summarize(windows, pass1Model)
-      : await pass1Summarize(windows, client!, pass1Model);
-    const { episode, changes } = provider === 'claude-cli'
-      ? await cliPass2Extract(summaries, pass2Model)
-      : await pass2Extract(summaries, client!, pass2Model);
+	try {
+		const windows = windowEvents(events, windowSize, windowOverlap);
+		const summaries =
+			provider === "claude-cli"
+				? await cliPass1Summarize(windows, pass1Model)
+				: await pass1Summarize(windows, client!, pass1Model);
+		const { episode, changes } =
+			provider === "claude-cli"
+				? await cliPass2Extract(summaries, pass2Model)
+				: await pass2Extract(summaries, client!, pass2Model);
 
-    const episodeRecord = createEpisode(db, {
-      sessionId,
-      summary: episode.goal + ': ' + episode.approach,
-      nodesInvolved: [],
-      timestamp: new Date().toISOString(),
-      metadata: episode as unknown as Record<string, unknown>,
-    });
+		const episodeRecord = createEpisode(db, {
+			sessionId,
+			summary: `${episode.goal}: ${episode.approach}`,
+			nodesInvolved: [],
+			timestamp: new Date().toISOString(),
+			metadata: episode as unknown as Record<string, unknown>,
+		});
 
-    const nodeIdMap = await applyGraphChanges(db, changes, sessionId, episodeRecord.id, episode.outcome, config?.embeddingConfig);
+		const nodeIdMap = await applyGraphChanges(
+			db,
+			changes,
+			sessionId,
+			episodeRecord.id,
+			episode.outcome,
+			config?.embeddingConfig,
+		);
 
-    db.prepare('UPDATE episodes SET nodes_involved = ? WHERE id = ?').run(
-      JSON.stringify([...nodeIdMap.values()]),
-      episodeRecord.id,
-    );
+		db.prepare("UPDATE episodes SET nodes_involved = ? WHERE id = ?").run(
+			JSON.stringify([...nodeIdMap.values()]),
+			episodeRecord.id,
+		);
 
-    fs.mkdirSync(path.join(dataDir, 'episodes'), { recursive: true });
-    fs.writeFileSync(
-      path.join(dataDir, 'episodes', sessionId + '.episode.json'),
-      JSON.stringify({ episodeId: episodeRecord.id, completedAt: new Date().toISOString() }),
-    );
-  } finally {
-    db.close();
-  }
+		fs.mkdirSync(path.join(dataDir, "episodes"), { recursive: true });
+		fs.writeFileSync(
+			path.join(dataDir, "episodes", `${sessionId}.episode.json`),
+			JSON.stringify({
+				episodeId: episodeRecord.id,
+				completedAt: new Date().toISOString(),
+			}),
+		);
+	} finally {
+		db.close();
+	}
 }
 
-export function readConsolidationTimestamp(dataDir: string, sessionId: string): string | null {
-  const markerPath = path.join(dataDir, 'sessions', `${sessionId}.last-consolidated-at.json`);
-  try {
-    const raw = fs.readFileSync(markerPath, 'utf-8');
-    const parsed = JSON.parse(raw) as { timestamp?: string };
-    return parsed.timestamp ?? null;
-  } catch {
-    return null;
-  }
+export function readConsolidationTimestamp(
+	dataDir: string,
+	sessionId: string,
+): string | null {
+	const markerPath = path.join(
+		dataDir,
+		"sessions",
+		`${sessionId}.last-consolidated-at.json`,
+	);
+	try {
+		const raw = fs.readFileSync(markerPath, "utf-8");
+		const parsed = JSON.parse(raw) as { timestamp?: string };
+		return parsed.timestamp ?? null;
+	} catch {
+		return null;
+	}
 }
 
-export function writeConsolidationTimestamp(dataDir: string, sessionId: string, timestamp: string): void {
-  const sessionsDir = path.join(dataDir, 'sessions');
-  try {
-    fs.mkdirSync(sessionsDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(sessionsDir, `${sessionId}.last-consolidated-at.json`),
-      JSON.stringify({ timestamp }),
-    );
-  } catch {
-    // swallow — P004: timestamp write failure must not block consolidation
-  }
+export function writeConsolidationTimestamp(
+	dataDir: string,
+	sessionId: string,
+	timestamp: string,
+): void {
+	const sessionsDir = path.join(dataDir, "sessions");
+	try {
+		fs.mkdirSync(sessionsDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(sessionsDir, `${sessionId}.last-consolidated-at.json`),
+			JSON.stringify({ timestamp }),
+		);
+	} catch {
+		// swallow — P004: timestamp write failure must not block consolidation
+	}
 }
 
 export function findUnconsolidatedSessions(dataDir: string): string[] {
-  const eventsDir = path.join(dataDir, 'events');
-  if (!fs.existsSync(eventsDir)) return [];
+	const eventsDir = path.join(dataDir, "events");
+	if (!fs.existsSync(eventsDir)) return [];
 
-  const files = fs.readdirSync(eventsDir).filter((f) => f.endsWith('.jsonl'));
-  const sessionIds: string[] = [];
+	const files = fs.readdirSync(eventsDir).filter((f) => f.endsWith(".jsonl"));
+	const sessionIds: string[] = [];
 
-  for (const file of files) {
-    const sessionId = file.replace(/\.jsonl$/, '');
-    const episodePath = path.join(dataDir, 'episodes', sessionId + '.episode.json');
-    const failedPath = path.join(dataDir, 'episodes', sessionId + '.failed.json');
-    if (!fs.existsSync(episodePath) && !fs.existsSync(failedPath)) {
-      sessionIds.push(sessionId);
-    }
-  }
+	for (const file of files) {
+		const sessionId = file.replace(/\.jsonl$/, "");
+		const episodePath = path.join(
+			dataDir,
+			"episodes",
+			`${sessionId}.episode.json`,
+		);
+		const failedPath = path.join(
+			dataDir,
+			"episodes",
+			`${sessionId}.failed.json`,
+		);
+		if (!fs.existsSync(episodePath) && !fs.existsSync(failedPath)) {
+			sessionIds.push(sessionId);
+		}
+	}
 
-  return sessionIds;
+	return sessionIds;
 }
 
-export function findFailedConsolidations(dataDir: string): Array<{ sessionId: string; error: string; timestamp: string }> {
-  const episodesDir = path.join(dataDir, 'episodes');
-  if (!fs.existsSync(episodesDir)) return [];
+export function findFailedConsolidations(
+	dataDir: string,
+): Array<{ sessionId: string; error: string; timestamp: string }> {
+	const episodesDir = path.join(dataDir, "episodes");
+	if (!fs.existsSync(episodesDir)) return [];
 
-  const results: Array<{ sessionId: string; error: string; timestamp: string }> = [];
+	const results: Array<{
+		sessionId: string;
+		error: string;
+		timestamp: string;
+	}> = [];
 
-  for (const file of fs.readdirSync(episodesDir).filter((f) => f.endsWith('.failed.json'))) {
-    try {
-      const raw = fs.readFileSync(path.join(episodesDir, file), 'utf-8');
-      const parsed = JSON.parse(raw) as { sessionId?: string; error?: string; timestamp?: string };
-      results.push({
-        sessionId: parsed.sessionId ?? file.replace(/\.failed\.json$/, ''),
-        error: parsed.error ?? 'unknown',
-        timestamp: parsed.timestamp ?? '',
-      });
-    } catch {
-      // malformed .failed.json — skip
-    }
-  }
+	for (const file of fs
+		.readdirSync(episodesDir)
+		.filter((f) => f.endsWith(".failed.json"))) {
+		try {
+			const raw = fs.readFileSync(path.join(episodesDir, file), "utf-8");
+			const parsed = JSON.parse(raw) as {
+				sessionId?: string;
+				error?: string;
+				timestamp?: string;
+			};
+			results.push({
+				sessionId: parsed.sessionId ?? file.replace(/\.failed\.json$/, ""),
+				error: parsed.error ?? "unknown",
+				timestamp: parsed.timestamp ?? "",
+			});
+		} catch {
+			// malformed .failed.json — skip
+		}
+	}
 
-  return results;
+	return results;
 }
 
 const STALE_LOCK_MS = 1800000; // 30 minutes
 
 export function isEpisodeComplete(dataDir: string, sessionId: string): boolean {
-  return fs.existsSync(path.join(dataDir, 'episodes', `${sessionId}.episode.json`));
+	return fs.existsSync(
+		path.join(dataDir, "episodes", `${sessionId}.episode.json`),
+	);
 }
 
-export function acquireConsolidationLock(dataDir: string, sessionId: string): boolean {
-  const lockPath = path.join(dataDir, 'episodes', `${sessionId}.consolidating.lock`);
-  try {
-    fs.mkdirSync(path.join(dataDir, 'episodes'), { recursive: true });
-    fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }), { flag: 'wx' });
-    return true;
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-      try {
-        const stat = fs.statSync(lockPath);
-        if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
-          fs.unlinkSync(lockPath);
-          try {
-            fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() }), { flag: 'wx' });
-            return true;
-          } catch {
-            return false;
-          }
-        }
-      } catch {
-        return false;
-      }
-    }
-    return false;
-  }
+export function acquireConsolidationLock(
+	dataDir: string,
+	sessionId: string,
+): boolean {
+	const lockPath = path.join(
+		dataDir,
+		"episodes",
+		`${sessionId}.consolidating.lock`,
+	);
+	try {
+		fs.mkdirSync(path.join(dataDir, "episodes"), { recursive: true });
+		fs.writeFileSync(
+			lockPath,
+			JSON.stringify({
+				pid: process.pid,
+				acquiredAt: new Date().toISOString(),
+			}),
+			{ flag: "wx" },
+		);
+		return true;
+	} catch (err: unknown) {
+		if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+			try {
+				const stat = fs.statSync(lockPath);
+				if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
+					fs.unlinkSync(lockPath);
+					try {
+						fs.writeFileSync(
+							lockPath,
+							JSON.stringify({
+								pid: process.pid,
+								acquiredAt: new Date().toISOString(),
+							}),
+							{ flag: "wx" },
+						);
+						return true;
+					} catch {
+						return false;
+					}
+				}
+			} catch {
+				return false;
+			}
+		}
+		return false;
+	}
 }
 
-export function releaseConsolidationLock(dataDir: string, sessionId: string): void {
-  try {
-    fs.unlinkSync(path.join(dataDir, 'episodes', `${sessionId}.consolidating.lock`));
-  } catch {
-    // swallow ENOENT or any other error — P004 compliance
-  }
+export function releaseConsolidationLock(
+	dataDir: string,
+	sessionId: string,
+): void {
+	try {
+		fs.unlinkSync(
+			path.join(dataDir, "episodes", `${sessionId}.consolidating.lock`),
+		);
+	} catch {
+		// swallow ENOENT or any other error — P004 compliance
+	}
 }
 
 export function spawnConsolidation(
-  sessionId: string,
-  dbPath: string,
-  dataDir: string,
+	sessionId: string,
+	dbPath: string,
+	dataDir: string,
 ): ChildProcess {
-  const workerPath = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    'consolidation-worker.js',
-  );
+	const workerPath = path.join(
+		path.dirname(fileURLToPath(import.meta.url)),
+		"consolidation-worker.js",
+	);
 
-  const child = spawn('node', [workerPath, sessionId, dbPath, dataDir], {
-    detached: true,
-    stdio: 'ignore',
-  });
-  child.unref();
-  return child;
+	const child = spawn("node", [workerPath, sessionId, dbPath, dataDir], {
+		detached: true,
+		stdio: "ignore",
+	});
+	child.unref();
+	return child;
 }
